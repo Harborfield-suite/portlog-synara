@@ -45,6 +45,21 @@ describe("ChatMarkdown", () => {
     expect(markup).not.toContain("text-neutral-900");
   });
 
+  it("renders PortLog evidence lines as authority-distinct transcript chrome", async () => {
+    const markup = await renderMarkdown(
+      [
+        "Ordinary model prose.",
+        "[portlog:evidence|E1|P-101 discharge check valve present]",
+        "More ordinary prose.",
+      ].join("\n"),
+    );
+
+    expect(markup).toContain('data-portlog-authority="portlog"');
+    expect(markup).toContain("PortLog evidence [E1]");
+    expect(markup).toContain("Ordinary model prose");
+    expect(markup).not.toContain("[portlog:evidence|E1|");
+  });
+
   it("renders inline math with KaTeX", async () => {
     const markup = await renderMarkdown("Euler wrote $e^{i\\\\pi} + 1 = 0$.");
 

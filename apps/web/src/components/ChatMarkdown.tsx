@@ -42,6 +42,7 @@ import { GeneratedMarkdownImage } from "./chat/GeneratedMarkdownImage";
 import { TerminalContextInlineChip } from "./chat/TerminalContextInlineChip";
 import type { ParsedTerminalContextEntry } from "../lib/terminalContext";
 import { formatInlineTerminalContextLabel } from "./chat/userMessageTerminalContexts";
+import { PortLogTranscriptSegments } from "../portlog/PortLogTranscriptSegments";
 import {
   COMPOSER_INLINE_CHIP_ICON_LABEL_GAP_CLASS_NAME,
   COMPOSER_INLINE_CHIP_TOKEN_ICON_CLASS_NAME,
@@ -1252,19 +1253,27 @@ function ChatMarkdown({
     ],
   );
 
+  const renderMarkdownBody = (body: string) => (
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={markdownComponents}
+      urlTransform={markdownUrlTransform}
+    >
+      {body}
+    </ReactMarkdown>
+  );
+
   return (
     <div
       className={`chat-markdown ${isUserVariant ? "chat-markdown--user " : ""}w-full min-w-0 ${className} text-foreground`}
       style={style}
     >
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePlugins}
-        components={markdownComponents}
-        urlTransform={markdownUrlTransform}
-      >
-        {renderedText}
-      </ReactMarkdown>
+      {isUserVariant ? (
+        renderMarkdownBody(renderedText)
+      ) : (
+        <PortLogTranscriptSegments text={renderedText} renderOrdinary={renderMarkdownBody} />
+      )}
     </div>
   );
 }
