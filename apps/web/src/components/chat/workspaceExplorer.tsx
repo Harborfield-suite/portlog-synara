@@ -40,6 +40,8 @@ import { EXPLORER_ROW_PROPS, useExplorerListNavigation } from "./explorerListNav
 import { FileEntryIcon } from "./FileEntryIcon";
 import { fileRowClassName, fileRowIndentStyle } from "./fileRowStyles";
 import { PanelStateMessage } from "./PanelStateMessage";
+import { PortLogArtifactBadge } from "../../portlog/PortLogArtifactBadge";
+import { portLogArtifactSortRank } from "../../portlog/portlogWorkspaceArtifacts";
 
 const EXPLORER_HIDDEN_DIRECTORY_NAMES = new Set([
   ".cache",
@@ -188,6 +190,7 @@ const ExplorerRow = forwardRef<
         />
       )}
       <span className="min-w-0 truncate">{entry.name}</span>
+      {isDirectory ? null : <PortLogArtifactBadge pathValue={entry.path} />}
     </button>
   );
 });
@@ -245,7 +248,14 @@ function WorkspaceDirectory(props: {
 
   return (
     <>
-      {(query.data?.entries ?? []).filter(shouldShowExplorerEntry).map((entry) => {
+      {(query.data?.entries ?? [])
+        .filter(shouldShowExplorerEntry)
+        .toSorted(
+          (left, right) =>
+            portLogArtifactSortRank(left.path) - portLogArtifactSortRank(right.path) ||
+            left.name.localeCompare(right.name),
+        )
+        .map((entry) => {
         if (entry.kind !== "directory") {
           return (
             <ExplorerRow
@@ -423,6 +433,7 @@ function WorkspaceSearchResultRow(props: {
           <span className="min-w-0 truncate text-[11px] text-muted-foreground/55">{dir}</span>
         ) : null}
       </div>
+      <PortLogArtifactBadge pathValue={entry.path} />
     </button>
   );
 }
