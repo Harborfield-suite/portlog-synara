@@ -1,6 +1,6 @@
 // FILE: EditorWorkspaceView.tsx
-// Purpose: Read-only editor-style thread surface with file explorer, workspace
-//          file search, file/diff preview, and chat.
+// Purpose: Editor-style thread surface with file explorer, workspace file
+//          search, file/diff preview, PortLog P&ID craft pane, and chat.
 // Layer: Chat route presentation
 
 import type { ProjectId } from "@synara/contracts";
@@ -23,7 +23,9 @@ import {
   FoldersIcon,
   PanelRightCloseIcon,
   SearchIcon,
+  WorkflowIcon,
 } from "~/lib/icons";
+import { PortLogCraftPane } from "../portlog/PortLogCraftPane";
 import {
   useDesktopTopBarTrafficLightGutterClassName,
   useDesktopTopBarWindowControlsGutterClassName,
@@ -60,7 +62,7 @@ import {
 import { ProjectMenuPicker, type ProjectMenuPickerOption } from "./ProjectMenuPicker";
 import { WorkspaceFilePreview } from "./WorkspaceFilePreview";
 
-type EditorCenterMode = "file" | "diff";
+export type EditorCenterMode = "file" | "diff" | "drawing";
 type EditorActivityBarItem = EditorCenterMode | "search";
 
 const EDITOR_CHAT_PANE_STORAGE_KEY = "synara.editor.chatPaneWidth";
@@ -327,6 +329,7 @@ function EditorActivityBar(props: {
 }) {
   const filesActive = props.sidebarVisible && !props.searchActive && props.centerMode === "file";
   const diffActive = props.sidebarVisible && !props.searchActive && props.centerMode === "diff";
+  const drawingActive = !props.searchActive && props.centerMode === "drawing";
   const searchActive = props.sidebarVisible && props.searchActive;
   return (
     <nav
@@ -346,6 +349,13 @@ function EditorActivityBar(props: {
         onClick={() => props.onSelectItem("diff")}
       >
         <ChangesIcon className="size-5" />
+      </ExplorerActivityBarButton>
+      <ExplorerActivityBarButton
+        label="P&ID drawing"
+        active={drawingActive}
+        onClick={() => props.onSelectItem("drawing")}
+      >
+        <WorkflowIcon className="size-5" />
       </ExplorerActivityBarButton>
       <ExplorerActivityBarButton
         label={searchActive ? "Hide search sidebar" : "Search files"}
@@ -384,6 +394,13 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
     useDesktopTopBarWindowControlsGutterClassName();
   const { centerMode, onCenterModeChange } = props;
   const handleActivityBarSelectItem = (item: EditorActivityBarItem) => {
+    // Drawing is a center craft mode, not a sidebar toggle: switch without
+    // forcing the explorer open/closed.
+    if (item === "drawing") {
+      setSearchPaneActive(false);
+      onCenterModeChange("drawing");
+      return;
+    }
     const itemActive =
       sidebarVisible &&
       (item === "search" ? searchPaneActive : !searchPaneActive && centerMode === item);
@@ -624,6 +641,11 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
             <div className={cn("min-h-0 min-w-0 flex-1", props.centerMode !== "diff" && "hidden")}>
               {props.diffPanel}
             </div>
+            {props.centerMode === "drawing" ? (
+              <div className="flex min-h-0 min-w-0 flex-1">
+                <PortLogCraftPane />
+              </div>
+            ) : null}
             {props.centerMode === "file" ? (
               <div className="flex min-h-0 min-w-0 flex-1">
                 <WorkspaceFilePreview

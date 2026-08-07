@@ -236,7 +236,7 @@ export function SingleChatSurface(props: {
   const [editorExpandedDirectories, setEditorExpandedDirectories] = useState<ReadonlySet<string>>(
     () => new Set(readEditorViewState(props.threadId)?.expandedDirectories ?? []),
   );
-  const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff">(() =>
+  const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff" | "drawing">(() =>
     props.search.editorFilePath
       ? "file"
       : (readEditorViewState(props.threadId)?.centerMode ?? "diff"),

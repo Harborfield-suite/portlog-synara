@@ -190,6 +190,36 @@ describe("EditorWorkspaceView", () => {
     expect(hiddenIndex).toBeGreaterThan(-1);
   });
 
+  it("renders the PortLog xyflow craft pane when centerMode is drawing", () => {
+    const queryClient = new QueryClient();
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <SidebarProvider>
+          <EditorWorkspaceView
+            workspaceRoot="/Users/tester/project"
+            projectName="project"
+            selectedFilePath={null}
+            expandedDirectories={new Set()}
+            centerMode="drawing"
+            diffFiles={[]}
+            selectedDiffFilePath={null}
+            diffPanel={<div>Diff panel body</div>}
+            chatPanel={<div>Chat panel</div>}
+            onSelectFile={vi.fn()}
+            onSelectDiffFile={vi.fn()}
+            onToggleDirectory={vi.fn()}
+            onCenterModeChange={vi.fn()}
+            onExitEditorView={vi.fn()}
+          />
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(markup).toContain('data-portlog-craft="xyflow"');
+    expect(markup).toContain("xyflow baseline");
+    expect(markup).toContain('aria-label="P&amp;ID drawing"');
+  });
+
   it("renders image files through the local image preview instead of text preview", () => {
     const queryClient = new QueryClient();
     const markup = renderToStaticMarkup(
