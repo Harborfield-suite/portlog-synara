@@ -259,6 +259,31 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       });
 
       yield* eventStore.append({
+        type: "thread.message-sent",
+        eventId: EventId.makeUnsafe("evt-turn-settings-message"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.makeUnsafe("thread-turn-settings"),
+        occurredAt: turnRequestedAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-settings-start"),
+        causationEventId: null,
+        correlationId: CommandId.makeUnsafe("cmd-turn-settings-start"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.makeUnsafe("thread-turn-settings"),
+          messageId: MessageId.makeUnsafe("message-turn-settings"),
+          role: "user",
+          text: "Create a durable turn",
+          dispatchMode: "queue",
+          dispatchOrigin: "user",
+          turnId: null,
+          streaming: false,
+          source: "native",
+          createdAt: turnRequestedAt,
+          updatedAt: turnRequestedAt,
+        },
+      });
+
+      yield* eventStore.append({
         type: "thread.turn-start-requested",
         eventId: EventId.makeUnsafe("evt-turn-settings-start"),
         aggregateKind: "thread",
@@ -306,6 +331,40 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       assert.equal(rows[0]!.runtimeMode, "approval-required");
       assert.equal(rows[0]!.interactionMode, "default");
       assert.equal(rows[0]!.updatedAt, turnRequestedAt);
+
+      const turnRows = yield* sql<{
+        readonly turnId: string | null;
+        readonly modelSelectionJson: string | null;
+        readonly pendingMessageId: string | null;
+        readonly state: string;
+        readonly requestedAt: string;
+        readonly startedAt: string | null;
+        readonly completedAt: string | null;
+      }>`
+        SELECT
+          turn_id AS "turnId",
+          model_selection_json AS "modelSelectionJson",
+          pending_message_id AS "pendingMessageId",
+          state,
+          requested_at AS "requestedAt",
+          started_at AS "startedAt",
+          completed_at AS "completedAt"
+        FROM projection_turns
+        WHERE thread_id = 'thread-turn-settings'
+      `;
+      assert.deepEqual(turnRows, [
+        {
+          turnId: null,
+          modelSelectionJson: JSON.stringify({
+            model: "openai/gpt-5.5",
+          }),
+          pendingMessageId: "message-turn-settings",
+          state: "pending",
+          requestedAt: turnRequestedAt,
+          startedAt: null,
+          completedAt: null,
+        },
+      ]);
 
       const sessionRows = yield* sql<{
         readonly status: string;

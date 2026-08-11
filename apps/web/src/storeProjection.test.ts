@@ -764,6 +764,32 @@ describe("store projection", () => {
     expect(threadsOf(next)[0]?.session?.provider).toBe("pi");
   });
 
+  it("preserves openaiCompatible as the active session provider", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        modelSelection: {
+          provider: "openaiCompatible",
+          model: "deepseek/deepseek-v4-flash",
+        },
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "openaiCompatible",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(threadsOf(next)[0]?.modelSelection.provider).toBe("openaiCompatible");
+    expect(threadsOf(next)[0]?.session?.provider).toBe("openaiCompatible");
+  });
+
   it("preserves exact OpenCode thread model slugs from the read model", () => {
     const initialState = makeState(makeThread());
     const readModel = makeReadModel(

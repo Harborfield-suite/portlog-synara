@@ -319,6 +319,11 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
     renderTraitsMenuContent: (input) => renderTraitsMenuContentForProvider("pi", input),
     renderTraitsPicker: (input) => renderTraitsPickerForProvider("pi", input),
   },
+  openaiCompatible: {
+    getState: (input) => getProviderStateFromCapabilities(input),
+    renderTraitsMenuContent: (input) => renderTraitsMenuContentForProvider("openaiCompatible", input),
+    renderTraitsPicker: (input) => renderTraitsPickerForProvider("openaiCompatible", input),
+  },
 };
 
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {

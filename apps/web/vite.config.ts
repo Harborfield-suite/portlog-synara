@@ -15,6 +15,7 @@ import { defineConfig, type Plugin } from "vite";
 import pkg from "./package.json" with { type: "json" };
 
 const port = Number(process.env.PORT ?? 5733);
+const viteHost = process.env.VITE_DEV_HOST?.trim() || "127.0.0.1";
 const sourcemapEnv = process.env.SYNARA_WEB_SOURCEMAP?.trim().toLowerCase();
 
 const buildSourcemap =
@@ -220,12 +221,14 @@ export default defineConfig({
   server: {
     port,
     strictPort: true,
+    host: viteHost,
     hmr: {
-      // Explicit config so Vite's HMR WebSocket connects reliably
-      // inside Electron's BrowserWindow. Vite 8 uses console.debug for
-      // connection logs — enable "Verbose" in DevTools to see them.
+      // Keep HMR on the same host as the page. Mismatched localhost vs
+      // 127.0.0.1 leaves Safari on the boot splash while Chromium recovers.
       protocol: "ws",
-      host: "localhost",
+      host: viteHost,
+      port,
+      clientPort: port,
     },
   },
   build: {

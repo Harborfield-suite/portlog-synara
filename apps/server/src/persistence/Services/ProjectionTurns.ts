@@ -10,11 +10,13 @@ import {
   CheckpointRef,
   IsoDateTime,
   MessageId,
+  ModelSelection,
   NonNegativeInt,
   OrchestrationProposedPlanId,
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
   ThreadId,
+  TrimmedNonEmptyString,
   TurnId,
 } from "@synara/contracts";
 import { Option, Schema, ServiceMap } from "effect";
@@ -31,9 +33,37 @@ export const ProjectionTurnState = Schema.Literals([
 ]);
 export type ProjectionTurnState = typeof ProjectionTurnState.Type;
 
+/**
+ * Durable turn model metadata intentionally excludes provider/session identity.
+ * A turn snapshot records only the model selected for that turn.
+ */
+export const ProjectionTurnModelSelection = Schema.Struct({
+  model: TrimmedNonEmptyString,
+});
+export type ProjectionTurnModelSelection = typeof ProjectionTurnModelSelection.Type;
+
+export function toProjectionTurnModelSelection(
+  modelSelection: ModelSelection | null | undefined,
+): ProjectionTurnModelSelection | null | undefined {
+  if (modelSelection === null || modelSelection === undefined) {
+    return modelSelection;
+  }
+  return { model: modelSelection.model };
+}
+
+
 export const ProjectionTurn = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.NullOr(TurnId),
+  /**
+   * The resolved model captured when this turn was requested.
+   * Provider/session identity belongs to the thread session projection, not a
+   * durable turn snapshot.
+   *
+   * Optional/null keeps rows written before the turn contract migration
+   * readable; new user turns populate it at the request boundary.
+   */
+  modelSelection: Schema.optional(Schema.NullOr(ProjectionTurnModelSelection)),
   pendingMessageId: Schema.NullOr(MessageId),
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
@@ -52,6 +82,11 @@ export type ProjectionTurn = typeof ProjectionTurn.Type;
 export const ProjectionTurnById = Schema.Struct({
   threadId: ThreadId,
   turnId: TurnId,
+  /**
+   * Immutable per-turn model snapshot. Provider/session ownership does not
+   * belong on a turn.
+   */
+  modelSelection: Schema.optional(Schema.NullOr(ProjectionTurnModelSelection)),
   pendingMessageId: Schema.NullOr(MessageId),
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
@@ -70,6 +105,8 @@ export type ProjectionTurnById = typeof ProjectionTurnById.Type;
 export const ProjectionPendingTurnStart = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
+  /** Snapshot retained while the provider runtime has not produced a turn id. */
+  modelSelection: Schema.optional(Schema.NullOr(ProjectionTurnModelSelection)),
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
   requestedAt: IsoDateTime,
@@ -98,6 +135,8 @@ export interface ProjectionTurnWaitSnapshot {
 
 export const GetProjectionPendingTurnStartInput = Schema.Struct({
   threadId: ThreadId,
+  /** Optional identity filter; omitted means the oldest queued placeholder. */
+  messageId: Schema.optional(MessageId),
 });
 export type GetProjectionPendingTurnStartInput = typeof GetProjectionPendingTurnStartInput.Type;
 
@@ -122,21 +161,23 @@ export interface ProjectionTurnRepositoryShape {
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /**
-   * Replaces any existing pending-start placeholder rows for a thread with exactly one latest pending-start row.
+   * Replaces the pending-start placeholder for this message, preserving other
+   * queued user messages in the same thread.
    */
   readonly replacePendingTurnStart: (
     row: ProjectionPendingTurnStart,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /**
-   * Returns the newest pending-start placeholder for a thread; this is expected to be at most one row after replacement writes.
+   * Returns the oldest pending-start placeholder for FIFO queued-turn promotion.
    */
   readonly getPendingTurnStartByThreadId: (
     input: GetProjectionPendingTurnStartInput,
   ) => Effect.Effect<Option.Option<ProjectionPendingTurnStart>, ProjectionRepositoryError>;
 
   /**
-   * Deletes only pending-start placeholder rows (`turnId = null`) for a thread and leaves concrete turn rows untouched.
+   * Deletes a pending-start placeholder, or all pending placeholders when no
+   * message identity is supplied. Concrete turn rows remain untouched.
    */
   readonly deletePendingTurnStartByThreadId: (
     input: GetProjectionPendingTurnStartInput,

@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { TrimmedString } from "./baseSchemas";
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL } from "./model";
 import { ModelSelection, ProviderKind, ThreadEnvironmentMode } from "./orchestration";
 
 const StringSetting = TrimmedString.check(Schema.isMaxLength(4096));
@@ -79,6 +78,19 @@ export const PiServerProviderSettings = Schema.Struct({
 });
 export type PiServerProviderSettings = typeof PiServerProviderSettings.Type;
 
+export const OpenAICompatibleServerProviderSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  // models.dev / OMP catalogue provider id (openrouter, openai, anthropic, …).
+  catalogProviderId: StringSetting.pipe(Schema.withDecodingDefault(() => "openrouter")),
+  // OpenRouter-compatible default; overridden from catalogue when catalogProviderId is set.
+  baseUrl: StringSetting.pipe(Schema.withDecodingDefault(() => "https://openrouter.ai/api/v1")),
+  // Preferred model id for the configured endpoint (e.g. openai/gpt-4o).
+  defaultModel: StringSetting.pipe(Schema.withDecodingDefault(() => "openai/gpt-4o")),
+  customModels: CustomModels,
+  apiKeyConfigured: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+});
+export type OpenAICompatibleServerProviderSettings = typeof OpenAICompatibleServerProviderSettings.Type;
+
 const DisabledSkillNames = Schema.Array(Schema.String.check(Schema.isMaxLength(256))).pipe(
   Schema.withDecodingDefault(() => []),
 );
@@ -97,8 +109,8 @@ export const ServerSettings = Schema.Struct({
   addProjectBaseDirectory: StringSetting.pipe(Schema.withDecodingDefault(() => "")),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
-      provider: "codex" as const,
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL,
+      provider: "pi" as const,
+      model: "openai/gpt-4o",
     })),
   ),
   providers: Schema.Struct({
@@ -111,6 +123,9 @@ export const ServerSettings = Schema.Struct({
     kilo: KiloServerProviderSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpenCodeServerProviderSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiServerProviderSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    openaiCompatible: OpenAICompatibleServerProviderSettings.pipe(
+      Schema.withDecodingDefault(() => ({})),
+    ),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   skills: SkillsServerSettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
@@ -188,6 +203,16 @@ export const ServerSettingsPatch = Schema.Struct({
           ...ProviderSettingsBasePatch,
           binaryPath: Schema.optionalKey(StringSetting),
           agentDir: Schema.optionalKey(StringSetting),
+        }),
+      ),
+      openaiCompatible: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          catalogProviderId: Schema.optionalKey(StringSetting),
+          baseUrl: Schema.optionalKey(StringSetting),
+          defaultModel: Schema.optionalKey(StringSetting),
+          customModels: Schema.optionalKey(CustomModels),
+          apiKey: Schema.optionalKey(StringSetting),
         }),
       ),
     }),

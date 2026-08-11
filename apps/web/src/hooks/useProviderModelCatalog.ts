@@ -295,6 +295,11 @@ export function useProviderModelCatalog(input: {
         modelHintByProvider?.opencode,
       ),
       pi: getAppModelOptions("pi", customModelsByProvider.pi, modelHintByProvider?.pi),
+      openaiCompatible: getAppModelOptions(
+        "openaiCompatible",
+        customModelsByProvider.openaiCompatible,
+        modelHintByProvider?.openaiCompatible,
+      ),
     };
     const result: Record<
       ProviderKind,
@@ -313,6 +318,7 @@ export function useProviderModelCatalog(input: {
       kilo: kiloDynamicModelsQuery.data,
       opencode: openCodeDynamicModelsQuery.data,
       pi: piDynamicModelsQuery.data,
+      openaiCompatible: undefined,
     };
     for (const provider of [
       "claudeAgent",
@@ -382,6 +388,7 @@ export function useProviderModelCatalog(input: {
       kilo: kiloDynamicModelsQuery.data?.models ?? [],
       opencode: openCodeDynamicModelsQuery.data?.models ?? [],
       pi: piDynamicModelsQuery.data?.models ?? [],
+      openaiCompatible: [],
     }),
     [
       antigravityModelsQuery.data?.models,

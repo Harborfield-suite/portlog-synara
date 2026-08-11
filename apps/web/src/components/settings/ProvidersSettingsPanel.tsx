@@ -81,11 +81,18 @@ type ProviderInstallTextKey =
   | "openCodeBinaryPath"
   | "openCodeServerUrl"
   | "piBinaryPath"
-  | "piAgentDir";
-type ProviderInstallPasswordKey = "kiloServerPassword" | "openCodeServerPassword";
+  | "piAgentDir"
+  | "openaiCompatibleBaseUrl"
+  | "openaiCompatibleCatalogProviderId"
+  | "openaiCompatibleDefaultModel";
+type ProviderInstallPasswordKey =
+  | "kiloServerPassword"
+  | "openCodeServerPassword"
+  | "openaiCompatibleApiKey";
 type ProviderInstallPasswordConfiguredKey =
   | "kiloServerPasswordConfigured"
-  | "openCodeServerPasswordConfigured";
+  | "openCodeServerPasswordConfigured"
+  | "openaiCompatibleApiKeyConfigured";
 type ProviderInstallBooleanKey = "openCodeExperimentalWebSockets";
 
 type ProviderInstallTextField = {
@@ -372,6 +379,51 @@ const PROVIDER_INSTALL_SETTINGS: readonly ProviderInstallSettings[] = [
         label: "Pi agent directory",
         placeholder: "Pi agent directory",
         description: "Optional custom Pi agent directory for auth, models, skills, and commands.",
+      },
+    ],
+  },
+  {
+    provider: "openaiCompatible",
+    docs: [
+      { label: "OpenRouter", href: "https://openrouter.ai/docs" },
+      { label: "OpenAI API", href: "https://platform.openai.com/docs/api-reference" },
+    ],
+    fields: [
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleCatalogProviderId",
+        label: "Catalogue provider id",
+        placeholder: "openrouter",
+        description: (
+          <>
+            models.dev / OMP provider id (openrouter, openai, anthropic, google, …). Featured
+            defaults start at <code>openrouter</code>.
+          </>
+        ),
+      },
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleBaseUrl",
+        label: "Base URL override",
+        placeholder: "https://openrouter.ai/api/v1",
+        description:
+          "Optional. Leave blank to use the catalogue base URL for the selected provider.",
+      },
+      {
+        kind: "password",
+        settingsKey: "openaiCompatibleApiKey",
+        configuredKey: "openaiCompatibleApiKeyConfigured",
+        label: "API key",
+        placeholder: "sk-… or OpenRouter key",
+        description: "Bring-your-own key. Cleared from the browser after save; stored server-side only.",
+      },
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleDefaultModel",
+        label: "Default model",
+        placeholder: "openai/gpt-4o",
+        description:
+          "Model id from the catalogue (fetched via server.listByokModels) or a custom slug.",
       },
     ],
   },

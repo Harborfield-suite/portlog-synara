@@ -117,7 +117,7 @@ describe("providerModelsPrefetchQueryOptions", () => {
       provider: "cursor",
       settings,
     });
-    expect(cursorOptions.queryKey).toEqual(
+    expect(cursorOptions?.queryKey).toEqual(
       providerDiscoveryQueryKeys.models("cursor", "/bin/agent", "https://api.example", null, null),
     );
 
@@ -126,7 +126,7 @@ describe("providerModelsPrefetchQueryOptions", () => {
       settings,
       cwd: "/tmp/project",
     });
-    expect(openCodeOptions.queryKey).toEqual(
+    expect(openCodeOptions?.queryKey).toEqual(
       providerDiscoveryQueryKeys.models("opencode", "/bin/opencode", null, null, "/tmp/project"),
     );
 
@@ -135,7 +135,7 @@ describe("providerModelsPrefetchQueryOptions", () => {
       settings,
       cwd: "/tmp/project",
     });
-    expect(piOptions.queryKey).toEqual(
+    expect(piOptions?.queryKey).toEqual(
       providerDiscoveryQueryKeys.models("pi", "/bin/pi", null, "/tmp/pi-agent", "/tmp/project"),
     );
 
@@ -144,7 +144,7 @@ describe("providerModelsPrefetchQueryOptions", () => {
       settings,
       cwd: "/tmp/project",
     });
-    expect(antigravityOptions.queryKey).toEqual(
+    expect(antigravityOptions?.queryKey).toEqual(
       providerDiscoveryQueryKeys.models(
         "antigravity",
         "/bin/antigravity",
@@ -158,8 +158,16 @@ describe("providerModelsPrefetchQueryOptions", () => {
       provider: "codex",
       settings,
     });
-    expect(codexOptions.queryKey).toEqual(
+    expect(codexOptions?.queryKey).toEqual(
       providerDiscoveryQueryKeys.models("codex", null, null, null, null),
+    );
+
+    const openAiCompatibleOptions = providerModelsPrefetchQueryOptions({
+      provider: "openaiCompatible",
+      settings,
+    });
+    expect(openAiCompatibleOptions?.queryKey).toEqual(
+      providerDiscoveryQueryKeys.models("openaiCompatible", null, null, null, null),
     );
   });
 });
@@ -204,6 +212,24 @@ describe("prefetchProviderModelsForNewThread", () => {
     );
     expect(prefetchQuery.mock.calls[1]?.[0].queryKey).toEqual(
       providerDiscoveryQueryKeys.composerCapabilities("cursor"),
+    );
+  });
+
+  it("prefetches openaiCompatible models without throwing", async () => {
+    const queryClient = new QueryClient();
+    const prefetchQuery = vi.spyOn(queryClient, "prefetchQuery").mockResolvedValue(undefined);
+
+    prefetchProviderModelsForNewThread(queryClient, {
+      provider: "openaiCompatible",
+      settings: makeSettings({ defaultProvider: "openaiCompatible" }),
+    });
+
+    expect(prefetchQuery).toHaveBeenCalledTimes(2);
+    expect(prefetchQuery.mock.calls[0]?.[0].queryKey).toEqual(
+      providerDiscoveryQueryKeys.models("openaiCompatible", null, null, null, null),
+    );
+    expect(prefetchQuery.mock.calls[1]?.[0].queryKey).toEqual(
+      providerDiscoveryQueryKeys.composerCapabilities("openaiCompatible"),
     );
   });
 });

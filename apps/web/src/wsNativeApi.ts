@@ -471,8 +471,8 @@ export function createWsNativeApi(): NativeApi {
   const api: NativeApi = {
     dialogs: {
       pickFolder: async () => {
-        if (!window.desktopBridge) return null;
-        return window.desktopBridge.pickFolder();
+        if (window.desktopBridge) return window.desktopBridge.pickFolder();
+        return transport.request(WS_METHODS.dialogsPickFolder, {});
       },
       saveFile: async (input) => {
         if (window.desktopBridge?.saveFile) {
@@ -670,6 +670,11 @@ export function createWsNativeApi(): NativeApi {
       refreshExternalMcpPairing: (input: ExternalMcpRefreshPairingInput) =>
         transport.request(WS_METHODS.serverRefreshExternalMcpPairing, input),
       refreshProviders: () => transport.request(WS_METHODS.serverRefreshProviders),
+      listByokProviders: () => transport.request(WS_METHODS.serverListByokProviders),
+      listByokModels: (input) => transport.request(WS_METHODS.serverListByokModels, input),
+      setByokApiKey: (input) => transport.request(WS_METHODS.serverSetByokApiKey, input),
+      testByokConnection: (input) =>
+        transport.request(WS_METHODS.serverTestByokConnection, input),
       // Provider updates run up to 2 minutes server-side; callers wrap this in
       // withProviderUpdateTimeout, which owns the client-side watchdog.
       updateProvider: (input) =>

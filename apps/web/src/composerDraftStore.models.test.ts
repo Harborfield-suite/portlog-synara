@@ -365,6 +365,7 @@ describe("composerDraftStore modelSelection", () => {
         kilo: [],
         opencode: [],
         pi: [],
+      openaiCompatible: [],
       },
       availableModelOptionsByProvider: {
         opencode: [{ slug: "opencode/gpt-5-nano", name: "GPT-5 Nano" }],
@@ -393,6 +394,7 @@ describe("composerDraftStore modelSelection", () => {
         kilo: [],
         opencode: [],
         pi: [],
+      openaiCompatible: [],
       },
       availableModelOptionsByProvider: {
         opencode: [
@@ -426,6 +428,7 @@ describe("composerDraftStore modelSelection", () => {
         kilo: [],
         opencode: [],
         pi: [],
+      openaiCompatible: [],
       },
       availableModelOptionsByProvider: {
         opencode: [
@@ -459,6 +462,7 @@ describe("composerDraftStore modelSelection", () => {
         kilo: [],
         opencode: [],
         pi: [],
+      openaiCompatible: [],
       },
       availableModelOptionsByProvider: {
         pi: [
@@ -469,6 +473,37 @@ describe("composerDraftStore modelSelection", () => {
     });
 
     expect(state.selectedModel).toBe("openai/gpt-5.5");
+  });
+
+  it("preserves an OpenRouter catalog draft model when only the gpt-4o seed is listed", () => {
+    const state = deriveEffectiveComposerModelState({
+      draft: {
+        modelSelectionByProvider: {
+          openaiCompatible: modelSelection("openaiCompatible", "deepseek/deepseek-v4-flash-0731"),
+        },
+        activeProvider: "openaiCompatible",
+      },
+      selectedProvider: "openaiCompatible",
+      threadModelSelection: null,
+      projectModelSelection: null,
+      customModelsByProvider: {
+        codex: [],
+        claudeAgent: [],
+        cursor: [],
+        antigravity: [],
+        grok: [],
+        droid: [],
+        kilo: [],
+        opencode: [],
+        pi: [],
+        openaiCompatible: [],
+      },
+      availableModelOptionsByProvider: {
+        openaiCompatible: [{ slug: "openai/gpt-4o", name: "GPT-4o (OpenAI-compatible)" }],
+      },
+    });
+
+    expect(state.selectedModel).toBe("deepseek/deepseek-v4-flash-0731");
   });
 });
 

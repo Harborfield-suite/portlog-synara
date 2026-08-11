@@ -1638,7 +1638,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       const turnRequestPayload = {
         threadId: command.threadId,
         messageId: command.message.messageId,
-        ...(command.modelSelection !== undefined ? { modelSelection: command.modelSelection } : {}),
+        // Resolve the app-global selection at the request boundary so the durable
+        // turn keeps an immutable execution snapshot even if the thread changes later.
+        modelSelection: command.modelSelection ?? targetThread.modelSelection,
         ...(command.providerOptions !== undefined
           ? { providerOptions: command.providerOptions }
           : {}),
@@ -1727,9 +1729,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           messageId: command.messageId,
-          ...(command.modelSelection !== undefined
-            ? { modelSelection: command.modelSelection }
-            : {}),
+          // Queued turns carry the same request-time global selection snapshot;
+          // dispatch must not resolve against a later thread selection.
+          modelSelection: command.modelSelection ?? thread.modelSelection,
           ...(command.providerOptions !== undefined
             ? { providerOptions: command.providerOptions }
             : {}),

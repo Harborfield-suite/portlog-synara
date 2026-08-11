@@ -92,7 +92,20 @@ export const PROVIDER_DESCRIPTORS = [
     displayName: PROVIDER_DISPLAY_NAMES.pi,
     available: true,
     supportsNativeTurnSteering: true,
-    usage: null,
+    usage: {
+      signInCommand: "pi",
+      learnMoreHref: "https://pi.dev/docs/latest/settings",
+    },
+  },
+  {
+    kind: "openaiCompatible",
+    displayName: PROVIDER_DISPLAY_NAMES.openaiCompatible,
+    available: true,
+    supportsNativeTurnSteering: false,
+    usage: {
+      signInCommand: "Settings → Providers → BYOK (API key)",
+      learnMoreHref: "https://openrouter.ai/docs",
+    },
   },
 ] as const satisfies readonly ProviderDescriptor[];
 

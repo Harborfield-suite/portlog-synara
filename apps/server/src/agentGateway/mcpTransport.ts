@@ -18,8 +18,7 @@ import {
   type JsonRpcRequest,
 } from "./protocol.ts";
 import {
-  GatewayToolError,
-  gatewayToolErrorResult,
+  AgentGatewayToolRegistry,
   type ToolContext,
   type ToolEntry,
 } from "./toolRuntime.ts";
@@ -67,7 +66,7 @@ export function makeAgentGatewayMcpTransport(input: {
     threadId: string,
   ) => Effect.Effect<OrchestrationThreadShell, unknown>;
 }): AgentGatewayShape["handleMcpPost"] {
-  const toolsByName = new Map(input.tools.map((tool) => [tool.definition.name, tool]));
+  const registry = new AgentGatewayToolRegistry(input.tools);
   const handleRequest = (request: JsonRpcRequest, context: Omit<ToolContext, "jsonRpcRequestId">) =>
     Effect.gen(function* () {
       switch (request.method) {
@@ -84,48 +83,24 @@ export function makeAgentGatewayMcpTransport(input: {
           return jsonRpcResult(request.id, {});
         case "tools/list":
           return jsonRpcResult(request.id, {
-            tools: input.tools.map((tool) => tool.definition),
+            tools: registry.listDefinitions(),
           });
         case "tools/call": {
           const toolName = request.params.name;
           if (typeof toolName !== "string") {
             return jsonRpcError(request.id, JSON_RPC_INVALID_PARAMS, "Missing tool name.");
           }
-          const tool = toolsByName.get(toolName);
+          const tool = registry.get(toolName);
           if (!tool) {
             return jsonRpcError(request.id, JSON_RPC_INVALID_PARAMS, `Unknown tool "${toolName}".`);
           }
           const rawArgs = request.params.arguments;
           const args = asRecord(rawArgs) ?? {};
-          const requiredCapability = tool.requiredCapability;
-          if (!context.callerCapabilities.has(requiredCapability)) {
-            return jsonRpcResult(
-              request.id,
-              gatewayToolErrorResult(
-                new GatewayToolError(
-                  "capability_denied",
-                  `This provider session is not authorized for ${requiredCapability}.`,
-                  { requiredCapability },
-                ),
-              ),
-            );
-          }
           const invocationContext: ToolContext = {
             ...context,
             jsonRpcRequestId: request.id,
           };
-          if (tool.requiresActiveTurn) {
-            const authorityError = yield* context.assertCallerTurnActive().pipe(
-              Effect.match({
-                onFailure: (error) => error,
-                onSuccess: () => null,
-              }),
-            );
-            if (authorityError !== null) {
-              return jsonRpcResult(request.id, gatewayToolErrorResult(authorityError));
-            }
-          }
-          const result = yield* Effect.suspend(() => tool.handler(args, invocationContext)).pipe(
+          const result = yield* registry.dispatch(toolName, args, invocationContext).pipe(
             Effect.catchDefect((defect) => Effect.succeed(mcpToolResultError(errorText(defect)))),
           );
           return jsonRpcResult(request.id, result);

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { TrimmedNonEmptyString } from "./baseSchemas";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
@@ -162,6 +163,13 @@ import {
   ServerListProviderUsageResult,
   ServerLifecycleStreamEvent,
   ServerGetSettingsResult,
+  ServerListByokModelsInput,
+  ServerListByokModelsResult,
+  ServerListByokProvidersResult,
+  ServerSetByokApiKeyInput,
+  ServerSetByokApiKeyResult,
+  ServerTestByokConnectionInput,
+  ServerTestByokConnectionResult,
   ServerListLocalServersResult,
   ServerListWorktreesResult,
   ServerProviderUpdateError,
@@ -441,6 +449,12 @@ export const WsStudioListThreadOutputsRpc = Rpc.make(WS_METHODS.studioListThread
   error: WsRpcError,
 });
 
+export const WsDialogsPickFolderRpc = Rpc.make(WS_METHODS.dialogsPickFolder, {
+  payload: Schema.Struct({}),
+  success: Schema.NullOr(TrimmedNonEmptyString),
+  error: WsRpcError,
+});
+
 export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   payload: FilesystemBrowseInput,
   success: FilesystemBrowseResult,
@@ -717,6 +731,30 @@ export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
 export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   payload: ServerUpdateSettingsInput,
   success: ServerUpdateSettingsResult,
+  error: WsRpcError,
+});
+
+export const WsServerListByokProvidersRpc = Rpc.make(WS_METHODS.serverListByokProviders, {
+  payload: Schema.Struct({}),
+  success: ServerListByokProvidersResult,
+  error: WsRpcError,
+});
+
+export const WsServerListByokModelsRpc = Rpc.make(WS_METHODS.serverListByokModels, {
+  payload: ServerListByokModelsInput,
+  success: ServerListByokModelsResult,
+  error: WsRpcError,
+});
+
+export const WsServerSetByokApiKeyRpc = Rpc.make(WS_METHODS.serverSetByokApiKey, {
+  payload: ServerSetByokApiKeyInput,
+  success: ServerSetByokApiKeyResult,
+  error: WsRpcError,
+});
+
+export const WsServerTestByokConnectionRpc = Rpc.make(WS_METHODS.serverTestByokConnection, {
+  payload: ServerTestByokConnectionInput,
+  success: ServerTestByokConnectionResult,
   error: WsRpcError,
 });
 
@@ -1040,6 +1078,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsSubscribeProjectDevServerEventsRpc,
   WsProjectsProvisionFromGitHubRpc,
   WsStudioListThreadOutputsRpc,
+  WsDialogsPickFolderRpc,
   WsFilesystemBrowseRpc,
   WsShellOpenInEditorRpc,
   WsGitGithubRepositoryRpc,
@@ -1085,6 +1124,10 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsServerGetEnvironmentRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerListByokProvidersRpc,
+  WsServerListByokModelsRpc,
+  WsServerSetByokApiKeyRpc,
+  WsServerTestByokConnectionRpc,
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
   WsServerListExternalMcpIntegrationsRpc,

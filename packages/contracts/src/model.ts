@@ -154,6 +154,7 @@ export const ProviderModelOptions = Schema.Struct({
   kilo: Schema.optional(OpenCodeModelOptions),
   opencode: Schema.optional(OpenCodeModelOptions),
   pi: Schema.optional(PiModelOptions),
+  openaiCompatible: Schema.optional(Schema.Struct({})),
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
 
@@ -496,8 +497,35 @@ type ModelDefinition = {
  * TODO: This should not be a static array, each provider
  * should return its own model list over the WS API.
  */
+const CODEX_GPT_5_6_CAPABILITIES: ModelCapabilities = {
+  ...CODEX_GPT_5_5_CAPABILITIES,
+  reasoningEffortLevels: [
+    { value: "none", label: "None" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium", isDefault: true },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+};
+
 export const MODEL_OPTIONS_BY_PROVIDER = {
   codex: [
+    {
+      slug: "gpt-5.6-sol",
+      name: "GPT-5.6 Sol",
+      capabilities: CODEX_GPT_5_6_CAPABILITIES,
+    },
+    {
+      slug: "gpt-5.6-terra",
+      name: "GPT-5.6 Terra",
+      capabilities: CODEX_GPT_5_6_CAPABILITIES,
+    },
+    {
+      slug: "gpt-5.6-luna",
+      name: "GPT-5.6 Luna",
+      capabilities: CODEX_GPT_5_6_CAPABILITIES,
+    },
     {
       slug: "gpt-5.5",
       name: "GPT-5.5",
@@ -826,6 +854,25 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
   ],
   // Pi discovery owns the live catalog, including auth-gated Anthropic models.
   pi: [],
+  // Host-owned BYOK: customModels + settings.defaultModel supply the picker;
+  // the built-in seed is OpenRouter's common default.
+  openaiCompatible: [
+    {
+      slug: "openai/gpt-4o",
+      name: "GPT-4o (OpenAI-compatible)",
+      capabilities: {
+        reasoningEffortLevels: [
+          { value: "low", label: "Low" },
+          { value: "medium", label: "Medium", isDefault: true },
+          { value: "high", label: "High" },
+        ],
+        supportsFastMode: false,
+        supportsThinkingToggle: false,
+        promptInjectedEffortLevels: [],
+        contextWindowOptions: [],
+      },
+    },
+  ],
   cursor: [
     {
       // Cursor exposes auto as the `default` model id over ACP; the adapter maps it.
@@ -1028,6 +1075,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<ProviderWithDefaultModel, ModelSl
   droid: "claude-opus-4-8",
   kilo: "kilo/kilo-auto/free",
   opencode: "openai/gpt-5",
+  openaiCompatible: "openai/gpt-4o",
 };
 
 // Backward compatibility for existing Codex-only call sites.
@@ -1037,6 +1085,11 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL = "gpt-5.4-mini" as const;
 
 export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string, ModelSlug>> = {
   codex: {
+    "5.6": "gpt-5.6-sol",
+    sol: "gpt-5.6-sol",
+    terra: "gpt-5.6-terra",
+    luna: "gpt-5.6-luna",
+    "gpt-5.6": "gpt-5.6-sol",
     "5.5": "gpt-5.5",
     "5.4": "gpt-5.4",
     "5.3": "gpt-5.3-codex",
@@ -1162,6 +1215,7 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
   kilo: {},
   opencode: {},
   pi: {},
+  openaiCompatible: {},
 };
 
 // ── Agent mention aliases ─────────────────────────────────────────────
@@ -1198,4 +1252,5 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   kilo: "Kilo",
   opencode: "OpenCode",
   pi: "Pi",
+  openaiCompatible: "BYOK",
 };

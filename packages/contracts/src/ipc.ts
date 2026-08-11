@@ -140,6 +140,13 @@ import type {
   ServerListProviderUsageInput,
   ServerListProviderUsageResult,
   ServerGetSettingsResult,
+  ServerListByokModelsInput,
+  ServerListByokModelsResult,
+  ServerListByokProvidersResult,
+  ServerSetByokApiKeyInput,
+  ServerSetByokApiKeyResult,
+  ServerTestByokConnectionInput,
+  ServerTestByokConnectionResult,
   ServerListLocalServersResult,
   ServerListWorktreesResult,
   ServerProviderUpdateInput,
@@ -700,6 +707,12 @@ export interface NativeApi {
       input: ExternalMcpRefreshPairingInput,
     ) => Promise<ExternalMcpCreateIntegrationResult>;
     refreshProviders: () => Promise<ServerRefreshProvidersResult>;
+    listByokProviders: () => Promise<ServerListByokProvidersResult>;
+    listByokModels: (input: ServerListByokModelsInput) => Promise<ServerListByokModelsResult>;
+    setByokApiKey: (input: ServerSetByokApiKeyInput) => Promise<ServerSetByokApiKeyResult>;
+    testByokConnection: (
+      input: ServerTestByokConnectionInput,
+    ) => Promise<ServerTestByokConnectionResult>;
     updateProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdateResult>;
     listWorktrees: () => Promise<ServerListWorktreesResult>;
     listLocalServers: () => Promise<ServerListLocalServersResult>;

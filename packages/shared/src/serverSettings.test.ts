@@ -51,6 +51,10 @@ describe("providerStartOptionsFromServerSettings", () => {
           binaryPath: "",
           agentDir: "",
         },
+        openaiCompatible: {
+          ...DEFAULT_SERVER_SETTINGS.providers.openaiCompatible,
+          baseUrl: "",
+        },
       },
     };
 

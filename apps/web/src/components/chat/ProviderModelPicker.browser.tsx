@@ -69,6 +69,14 @@ const MODEL_OPTIONS_BY_PROVIDER = {
       name: "Gemini 3.5 Flash",
     },
   ],
+  openaiCompatible: [
+    {
+      slug: "openai/gpt-4o",
+      name: "GPT-4o",
+      upstreamProviderId: "openrouter",
+      upstreamProviderName: "OpenRouter",
+    },
+  ],
 } as const satisfies Record<ProviderKind, ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>>;
 
 const MANY_OPENCODE_MODELS = Array.from({ length: 16 }, (_, index) => ({

@@ -1,7 +1,11 @@
 import {
   CheckpointRef,
-  IsoDateTime,
+  HarnessInvocationCheckpoint,
+  HarnessInvocationError,
+  HarnessInvocationRecord,
+  HarnessInvocationTarget,
   MessageId,
+  IsoDateTime,
   NonNegativeInt,
   OrchestrationPendingInteraction,
   OrchestrationCheckpointFile,
@@ -61,6 +65,7 @@ import { ProjectionThreadProposedPlan } from "../../persistence/Services/Project
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
+import { mergeHarnessInvocationActivities } from "../harnessInvocationActivity.ts";
 import {
   ProjectionSnapshotQuery,
   type ProjectionFullThreadDiffContext,
@@ -139,6 +144,20 @@ const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
     sequence: Schema.NullOr(NonNegativeInt),
   }),
 );
+const ProjectionHarnessInvocationDbRowSchema = Schema.Struct({
+  invocationId: HarnessInvocationRecord.fields.invocationId,
+  threadId: HarnessInvocationRecord.fields.threadId,
+  turnId: HarnessInvocationRecord.fields.turnId,
+  target: Schema.fromJsonString(HarnessInvocationTarget),
+  state: HarnessInvocationRecord.fields.state,
+  currentAttempt: HarnessInvocationRecord.fields.currentAttempt,
+  checkpoint: Schema.NullOr(Schema.fromJsonString(HarnessInvocationCheckpoint)),
+  result: Schema.NullOr(Schema.fromJsonString(Schema.Unknown)),
+  error: Schema.NullOr(Schema.fromJsonString(HarnessInvocationError)),
+  createdAt: HarnessInvocationRecord.fields.createdAt,
+  updatedAt: HarnessInvocationRecord.fields.updatedAt,
+  completedAt: HarnessInvocationRecord.fields.completedAt,
+});
 type PendingInteractionRow = typeof OrchestrationPendingInteraction.Type;
 const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession;
 const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
@@ -243,6 +262,10 @@ type ProjectionThreadProposedPlanDbRow = Schema.Schema.Type<
   typeof ProjectionThreadProposedPlanDbRowSchema
 >;
 type ProjectionThreadActivityDbRow = Schema.Schema.Type<typeof ProjectionThreadActivityDbRowSchema>;
+
+type ProjectionHarnessInvocationDbRow = Schema.Schema.Type<
+  typeof ProjectionHarnessInvocationDbRowSchema
+>;
 type ProjectionCheckpointDbRow = Schema.Schema.Type<typeof ProjectionCheckpointDbRowSchema>;
 type ProjectionLatestTurnDbRow = Schema.Schema.Type<typeof ProjectionLatestTurnDbRowSchema>;
 type ProjectionThreadSessionDbRow = Schema.Schema.Type<typeof ProjectionThreadSessionDbRowSchema>;
@@ -1669,6 +1692,29 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           activity_id ASC
       `,
   });
+  const listHarnessInvocationRowsByThread = SqlSchema.findAll({
+    Request: ThreadIdLookupInput,
+    Result: ProjectionHarnessInvocationDbRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          invocation_id AS "invocationId",
+          thread_id AS "threadId",
+          turn_id AS "turnId",
+          target_json AS "target",
+          state,
+          current_attempt AS "currentAttempt",
+          checkpoint_json AS "checkpoint",
+          result_json AS "result",
+          error_json AS "error",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          completed_at AS "completedAt"
+        FROM harness_invocations
+        WHERE thread_id = ${threadId}
+        ORDER BY created_at ASC, invocation_id ASC
+      `,
+  });
 
   const listPendingInteractionRowsByThread = SqlSchema.findAll({
     Request: ThreadIdLookupInput,
@@ -2704,6 +2750,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         messageRows,
         proposedPlanRows,
         activityRows,
+        invocationRows,
         pendingInteractionRows,
         checkpointRows,
         latestTurnRow,
@@ -2730,6 +2777,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             toPersistenceSqlOrDecodeError(
               `${options.tracePrefix}:listActivities:query`,
               `${options.tracePrefix}:listActivities:decodeRows`,
+            ),
+          ),
+        ),
+        listHarnessInvocationRowsByThread({ threadId }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              `${options.tracePrefix}:listHarnessInvocations:query`,
+              `${options.tracePrefix}:listHarnessInvocations:decodeRows`,
             ),
           ),
         ),
@@ -2775,7 +2830,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         }),
         messages: messageRows.map(orchestrationMessageFromProjectionRow),
         proposedPlans: proposedPlanRows.map((row) => toProjectedProposedPlan(row)),
-        activities: activityRows.map((row) => toProjectedActivity(row)),
+        activities: mergeHarnessInvocationActivities(
+          activityRows.map((row) => toProjectedActivity(row)),
+          invocationRows,
+        ),
         pendingInteractions: pendingInteractionRows,
         checkpoints: checkpointRows.map((row) => toProjectedCheckpoint(row)),
         session: Option.match(sessionRow, {

@@ -24,6 +24,7 @@ import { useVoidSpace } from "../voidSpaceStore";
 import { cn } from "~/lib/utils";
 
 import { FolderClosed } from "./FolderClosed";
+import { LocalDirectoryPickerDialog } from "./LocalDirectoryPickerDialog";
 import {
   CreateGitHubProjectFields,
   PROJECT_DIALOG_FIELD_CONTROL_CLASS_NAME,
@@ -126,6 +127,7 @@ export function CreateProjectDialog(props: {
    */
   const [createdSpace, setCreatedSpace] = useState<Space | null>(null);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [serverFolderPickerOpen, setServerFolderPickerOpen] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export function CreateProjectDialog(props: {
     setSpaceEditorOpen(false);
     setCreatedSpace(null);
     setIsPickingFolder(false);
+    setServerFolderPickerOpen(false);
     setIsDropTarget(false);
     setSubmitting(false);
     setFormError(null);
@@ -238,7 +241,11 @@ export function CreateProjectDialog(props: {
         else applyPickedFolder(picked);
       }
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Unable to open the folder picker.");
+      if (!isElectron) {
+        setServerFolderPickerOpen(true);
+      } else {
+        setFormError(error instanceof Error ? error.message : "Unable to open the folder picker.");
+      }
     }
     setIsPickingFolder(false);
   };
@@ -407,6 +414,7 @@ export function CreateProjectDialog(props: {
   const finalClonePath = joinProjectPath(trimmedDestinationParent, trimmedDirectoryName);
 
   return (
+    <>
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogPopup>
         <DialogHeader className="px-5 pt-5">
@@ -492,7 +500,18 @@ export function CreateProjectDialog(props: {
                     )}
                   </button>
                 </div>
-              ) : null}
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-center"
+                  disabled={submitting}
+                  onClick={() => void handleBrowse()}
+                >
+                  <CentralIcon name="folder-open" className="size-4" aria-hidden="true" />
+                  Choose folder
+                </Button>
+              )}
             </>
           ) : (
             <CreateGitHubProjectFields
@@ -641,5 +660,12 @@ export function CreateProjectDialog(props: {
         />
       </DialogPopup>
     </Dialog>
+    <LocalDirectoryPickerDialog
+      open={serverFolderPickerOpen}
+      initialPath={props.defaultCloneParent || "~"}
+      onOpenChange={setServerFolderPickerOpen}
+      onSelect={applyPickedFolder}
+    />
+    </>
   );
 }

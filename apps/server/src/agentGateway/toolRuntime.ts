@@ -1,5 +1,5 @@
 import type { ProviderKind } from "@synara/contracts";
-import type { Effect } from "effect";
+import { Effect } from "effect";
 
 import type { AgentGatewayTargetError } from "./targetResolver.ts";
 import type { AgentGatewayCapability } from "./Services/AgentGatewaySessionRegistry.ts";
@@ -70,6 +70,69 @@ export interface McpToolEntry<Context, Capability extends string> {
     context: Context,
   ) => Effect.Effect<McpToolCallResult>;
   readonly requiredCapability: Capability;
+}
+
+/** Single capability and policy boundary for MCP tool calls. */
+export class AgentGatewayToolRegistry {
+  private readonly toolsByName: ReadonlyMap<string, ToolEntry>;
+  readonly tools: ReadonlyArray<ToolEntry>;
+
+  constructor(tools: ReadonlyArray<ToolEntry>) {
+    const byName = new Map<string, ToolEntry>();
+    for (const tool of tools) {
+      const name = tool.definition.name;
+      if (byName.has(name)) {
+        throw new Error(`Duplicate agent gateway tool registration: ${name}`);
+      }
+      byName.set(name, tool);
+    }
+    this.tools = [...tools];
+    this.toolsByName = byName;
+  }
+
+  listDefinitions(): ReadonlyArray<McpToolDefinition> {
+    return this.tools.map((tool) => tool.definition);
+  }
+
+  get(name: string): ToolEntry | undefined {
+    return this.toolsByName.get(name);
+  }
+
+  dispatch(
+    name: string,
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Effect.Effect<McpToolCallResult> {
+    const tool = this.toolsByName.get(name);
+    if (!tool) {
+      return Effect.succeed(
+        mcpToolResultJson({
+          error: { code: "unknown_tool", message: `Unknown tool "${name}".` },
+        }),
+      );
+    }
+    return Effect.gen(function* () {
+      if (!context.callerCapabilities.has(tool.requiredCapability)) {
+        return gatewayToolErrorResult(
+          new GatewayToolError(
+            "capability_denied",
+            `This provider session is not authorized for ${tool.requiredCapability}.`,
+            { requiredCapability: tool.requiredCapability },
+          ),
+        );
+      }
+      if (tool.requiresActiveTurn) {
+        const authorityError = yield* context.assertCallerTurnActive().pipe(
+          Effect.match({
+            onFailure: (error) => error,
+            onSuccess: () => null,
+          }),
+        );
+        if (authorityError !== null) return gatewayToolErrorResult(authorityError);
+      }
+      return yield* Effect.suspend(() => tool.handler(args, context));
+    });
+  }
 }
 
 export class GatewayToolError extends Error {

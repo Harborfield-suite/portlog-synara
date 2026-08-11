@@ -21,6 +21,7 @@ import { CursorAdapter } from "../Services/CursorAdapter.ts";
 import { DroidAdapter } from "../Services/DroidAdapter.ts";
 import { GrokAdapter } from "../Services/GrokAdapter.ts";
 import { KiloAdapter } from "../Services/KiloAdapter.ts";
+import { OpenAICompatibleAdapter } from "../Services/OpenAICompatibleAdapter.ts";
 import { OpenCodeAdapter } from "../Services/OpenCodeAdapter.ts";
 import { PiAdapter } from "../Services/PiAdapter.ts";
 import { AntigravityAdapter } from "../Services/AntigravityAdapter.ts";
@@ -44,6 +45,7 @@ const makeProviderAdapterRegistry = (options?: ProviderAdapterRegistryLiveOption
             yield* KiloAdapter,
             yield* OpenCodeAdapter,
             yield* PiAdapter,
+            yield* OpenAICompatibleAdapter,
           ];
     const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
 

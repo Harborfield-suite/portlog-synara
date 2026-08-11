@@ -470,5 +470,7 @@ export function buildModelSelection(
             options: options as PiModelOptions,
           }
         : { provider, model };
+    case "openaiCompatible":
+      return { provider, model };
   }
 }

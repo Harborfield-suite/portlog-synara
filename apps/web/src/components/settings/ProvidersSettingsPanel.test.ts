@@ -27,6 +27,9 @@ describe("isProviderInstallSettingsDirty", () => {
       { openCodeExperimentalWebSockets: true },
       { piBinaryPath: "/opt/pi" },
       { piAgentDir: "/tmp/pi-agent" },
+      { openaiCompatibleCatalogProviderId: "openai" },
+      { openaiCompatibleBaseUrl: "https://api.openai.com/v1" },
+      { openaiCompatibleDefaultModel: "gpt-4o" },
     ] satisfies ReadonlyArray<Partial<AppSettings>>;
 
     expect(isProviderInstallSettingsDirty(defaults, defaults)).toBe(false);
@@ -76,11 +79,16 @@ describe("createProviderInstallResetPatch", () => {
         "openCodeExperimentalWebSockets",
         "openCodeServerPassword",
         "openCodeServerUrl",
+        "openaiCompatibleApiKey",
+        "openaiCompatibleBaseUrl",
+        "openaiCompatibleCatalogProviderId",
+        "openaiCompatibleDefaultModel",
         "piAgentDir",
         "piBinaryPath",
       ].sort(),
     );
     expect(patch.kiloServerPassword).toBe("");
     expect(patch.openCodeServerPassword).toBe("");
+    expect(patch.openaiCompatibleApiKey).toBe("");
   });
 });

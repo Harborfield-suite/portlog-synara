@@ -22,8 +22,12 @@ import type { ProviderUsageContext } from "./types";
 // Providers whose live snapshot is enriched with on-disk token-total lines (24h/7d/30d).
 const LOCAL_ARCHIVE_PROVIDERS: ReadonlySet<ProviderKind> = new Set(["codex", "claudeAgent"]);
 
-const providerChildKind = (provider: ProviderKind): ProviderChildKind =>
-  provider === "claudeAgent" ? "claude" : provider;
+const providerChildKind = (provider: ProviderKind): ProviderChildKind => {
+  if (provider === "openaiCompatible") {
+    throw new Error("openaiCompatible has no provider child environment");
+  }
+  return provider === "claudeAgent" ? "claude" : provider;
+};
 
 function buildContext(): ProviderUsageContext {
   return {

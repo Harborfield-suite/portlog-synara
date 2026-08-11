@@ -3579,4 +3579,19 @@ describe("deriveWorkLogEntries Codex find regression", () => {
       toolCallId: "call_UmQKQmLCCrj9PF82rupLIFDO",
     });
   });
+  it("renders durable harness invocation state with expandable details", () => {
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        id: "harness-invocation:inv-1",
+        kind: "harness.invocation",
+        summary: "Tool · read_file · unknown — reconciliation required",
+        tone: "error",
+        payload: { invocationId: "inv-1", state: "unknown", updatedAt: "2026-08-10T00:00:03.000Z", target: { kind: "tool", toolName: "read_file" } },
+      }),
+    ], undefined);
+    expect(entries[0]?.liveActivity?.state).toBe("failed");
+    expect(entries[0]?.liveActivity?.detail).toContain("reconciliation");
+    expect(entries[0]?.toolDetails?.content).toContain("inv-1");
+  });
+
 });

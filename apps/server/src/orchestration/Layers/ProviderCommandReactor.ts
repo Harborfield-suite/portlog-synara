@@ -125,6 +125,7 @@ import {
   type ProviderIntentEvent,
 } from "../providerIntentClassification.ts";
 import { deriveTurnStartSession } from "../turnStartSession.ts";
+import { durableTurnIdForMessage } from "../messageTurnId.ts";
 import { TurnCheckpointCoordinator } from "../Services/TurnCheckpointCoordinator.ts";
 import { resolveProviderSessionThread as resolveProviderSessionThreadFromProjection } from "../providerSessionThread.ts";
 
@@ -1106,21 +1107,12 @@ const make = Effect.gen(function* () {
     )
       ? thread.session.providerName
       : undefined;
-    const requestedModelSelection = options?.modelSelection;
-    const threadProvider: ProviderKind = currentProvider ?? thread.modelSelection.provider;
-    if (
-      requestedModelSelection !== undefined &&
-      requestedModelSelection.provider !== threadProvider
-    ) {
-      return yield* new ProviderAdapterValidationError({
-        provider: threadProvider,
-        operation: "thread.turn.start",
-        issue: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.provider}'.`,
-      });
-    }
-    const preferredProvider: ProviderKind = currentProvider ?? threadProvider;
-    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
     const settingsSnapshot = yield* serverSettings.getSnapshot;
+    const requestedModelSelection = options?.modelSelection;
+    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
+    const threadProvider: ProviderKind = currentProvider ?? desiredModelSelection.provider;
+    const preferredProvider: ProviderKind =
+      requestedModelSelection?.provider ?? currentProvider ?? threadProvider;
     if (!settingsSnapshot.settings.providers[preferredProvider].enabled) {
       return yield* new ProviderAdapterValidationError({
         provider: preferredProvider,
@@ -1226,6 +1218,9 @@ const make = Effect.gen(function* () {
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
+        // Keep the resolved per-turn selection separate from the legacy thread
+        // projection even when the runtime can switch models in place.
+        threadSessionModelSelections.set(threadId, desiredModelSelection);
         return {
           activeSessionBeforeEnsure,
           activeSession: reusableSession,
@@ -1472,9 +1467,13 @@ const make = Effect.gen(function* () {
       shouldBootstrapHandoff && handoffBootstrapAvailableChars > 0
         ? buildHandoffBootstrapText(thread, handoffBootstrapAvailableChars)
         : null;
+    const resolvedTurnModelSelection =
+      input.modelSelection ??
+      threadSessionModelSelections.get(input.threadId) ??
+      thread.modelSelection;
     const selectedProvider =
-      input.modelSelection?.provider ??
-      threadSessionModelSelections.get(input.threadId)?.provider ??
+      resolvedTurnModelSelection.provider ??
+      activeSession.provider ??
       thread.session?.providerName ??
       thread.modelSelection.provider;
     const hasPendingPriorTranscriptBootstrap =
@@ -1613,7 +1612,7 @@ const make = Effect.gen(function* () {
     });
     const sessionModelSwitch = (yield* providerService.getCapabilities(activeSession.provider))
       .sessionModelSwitch;
-    const requestedModelSelection = input.modelSelection ?? thread.modelSelection;
+    const requestedModelSelection = resolvedTurnModelSelection;
     const modelForTurn =
       sessionModelSwitch === "unsupported"
         ? activeSession.model !== undefined
@@ -1625,13 +1624,18 @@ const make = Effect.gen(function* () {
         : requestedModelSelection;
     const providerTurnInput = {
       threadId: input.threadId,
+      // Every normal turn carries the durable user-message identity through the
+      // provider facade as its idempotency key; adapters may ignore this optional field.
+      turnId: durableTurnIdForMessage({ threadId: input.threadId, messageId: input.messageId }),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(input.skills !== undefined ? { skills: input.skills } : {}),
       ...(providerMentions !== undefined ? { mentions: providerMentions } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
     };
-    const sendQueuedProviderTurn = (messageText: string | undefined) =>
+    // Normal user turns cross this boundary once per dispatch attempt. Intentional
+    // retries call it again with the same durable turnId; runtime activity never does.
+    const dispatchNormalProviderTurn = (messageText: string | undefined) =>
       providerService.sendTurn({
         ...providerTurnInput,
         ...(messageText ? { input: messageText } : {}),
@@ -1770,9 +1774,9 @@ const make = Effect.gen(function* () {
               bootstrappedPriorTranscript: retryBootstrapText !== null,
             },
           );
-          return yield* sendQueuedProviderTurn(retryNormalizedInput);
+          return yield* dispatchNormalProviderTurn(retryNormalizedInput);
         });
-      const sentTurn = yield* sendQueuedProviderTurn(normalizedInput).pipe(
+      const sentTurn = yield* dispatchNormalProviderTurn(normalizedInput).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
             if (selectedProvider !== "claudeAgent" || !isStaleClaudeResumeError(error)) {
@@ -1813,7 +1817,7 @@ const make = Effect.gen(function* () {
                 messageId: input.messageId,
               },
             );
-            return yield* sendQueuedProviderTurn(normalizedInput).pipe(
+            return yield* dispatchNormalProviderTurn(normalizedInput).pipe(
               Effect.catch((retryError) =>
                 isStaleClaudeResumeError(retryError)
                   ? replayWithTranscriptBootstrap(retryError)
@@ -2224,7 +2228,9 @@ const make = Effect.gen(function* () {
       // gap between a steer interrupt and the steered turn's start) would race a
       // live provider turn. Steer-capable providers ride the live turn natively;
       // everything else re-queues and is promoted when the live turn settles.
-      const providerName = thread.session?.providerName ?? thread.modelSelection.provider;
+      const turnModelSelection = event.payload.modelSelection ?? thread.modelSelection;
+      const providerName =
+        turnModelSelection.provider ?? thread.session?.providerName ?? thread.modelSelection.provider;
       const liveTurnId = yield* resolveLiveProviderTurnId(event.payload.threadId);
       const hasLiveTurn = liveTurnId !== undefined;
       // Steering is only meaningful against a live turn. The projection can

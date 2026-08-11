@@ -117,6 +117,11 @@ export function providerModelsPrefetchQueryOptions(input: {
         agentDir: settings.piAgentDir || null,
         cwd,
       });
+    case "openaiCompatible":
+      // OpenRouter / BYOK (and PortLog harness bridge) use this provider kind.
+      return providerModelsQueryOptions({ provider: "openaiCompatible" });
+    default:
+      return null;
   }
 }
 
@@ -159,13 +164,14 @@ export function prefetchProviderModelsForNewThread(
   },
 ): void {
   const cwd = input.cwd ?? null;
-  void queryClient.prefetchQuery(
-    providerModelsPrefetchQueryOptions({
-      provider: input.provider,
-      settings: input.settings,
-      cwd,
-    }),
-  );
+  const modelsOptions = providerModelsPrefetchQueryOptions({
+    provider: input.provider,
+    settings: input.settings,
+    cwd,
+  });
+  if (modelsOptions) {
+    void queryClient.prefetchQuery(modelsOptions);
+  }
 
   // Agent/mode lists ride along for providers that surface them next to models.
   const agentsOptions = providerAgentsPrefetchQueryOptions({

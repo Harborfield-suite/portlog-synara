@@ -51,6 +51,8 @@ export const AutomationRunId = makeEntityId("AutomationRunId");
 export type AutomationRunId = typeof AutomationRunId.Type;
 export const TurnId = makeEntityId("TurnId");
 export type TurnId = typeof TurnId.Type;
+export const InvocationId = makeEntityId("InvocationId");
+export type InvocationId = typeof InvocationId.Type;
 
 export const ProviderItemId = makeEntityId("ProviderItemId");
 export type ProviderItemId = typeof ProviderItemId.Type;

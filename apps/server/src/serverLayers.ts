@@ -47,6 +47,7 @@ import { ProjectPullRequestPinsLive } from "./persistence/Layers/ProjectPullRequ
 import { ProjectionTurnRepositoryLive } from "./persistence/Layers/ProjectionTurns";
 import { OrchestrationEventDeliveryRepositoryLive } from "./persistence/Layers/OrchestrationEventDeliveries";
 import { ProviderRuntimeEventRepositoryLive } from "./persistence/Layers/ProviderRuntimeEvents";
+import { HarnessInvocationTraceRepositoryLive } from "./persistence/Layers/HarnessInvocationTrace";
 import { ThreadDiagnosticsQueryLive } from "./diagnostics/Layers/ThreadDiagnosticsQuery";
 import { ManagedAttachmentCleanupLive } from "./managedAttachmentCleanup";
 import { PullRequestServiceLive } from "./pullRequests/Layers/PullRequestService";
@@ -193,6 +194,7 @@ export function makeServerRuntimeServicesLayer(
     automationRunReactorLayer,
     managedAttachmentCleanupLayer,
     AutomationRepositoryLive,
+    HarnessInvocationTraceRepositoryLive,
     AgentGatewayOperationRepositoryLive,
     ExternalMcpRepositoryLive,
     externalMcpServiceLayer,

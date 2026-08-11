@@ -459,6 +459,22 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     ...(toolCallId ? { toolCallId } : {}),
     ...(toolStatus ? { toolStatus } : {}),
   };
+  if (activity.kind === "harness.invocation" && payload) {
+    const invocationState = typeof payload.state === "string" ? payload.state : "unknown";
+    const liveState = invocationState === "running" ? "thinking" : invocationState === "completed" ? "completed" : invocationState === "cancelled" || invocationState === "interrupted" ? "cancelled" : invocationState === "failed" || invocationState === "unknown" ? "failed" : "waiting";
+    entry.liveActivity = {
+      state: liveState,
+      label: entry.label,
+      lastActivityAt: typeof payload.updatedAt === "string" ? payload.updatedAt : activity.createdAt,
+      ...(invocationState === "unknown" ? { detail: "Outcome is unknown; reconciliation is required." } : {}),
+    };
+    entry.toolDetails = {
+      kind: "command",
+      title: entry.label,
+      content: JSON.stringify(payload, null, 2),
+    };
+  }
+
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
   if (payload && typeof payload.detail === "string" && payload.detail.length > 0) {

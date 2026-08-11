@@ -63,6 +63,9 @@ export const ProviderKind = Schema.Literals([
   "kilo",
   "opencode",
   "pi",
+  // Host-owned OpenAI-compatible BYOK (OpenRouter-style). Credentials live in
+  // Synara's secret store — not Pi/vendor CLI auth files.
+  "openaiCompatible",
 ]);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
@@ -78,7 +81,7 @@ export const ProviderSandboxMode = Schema.Literals([
   "danger-full-access",
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
-export const DEFAULT_PROVIDER_KIND: ProviderKind = "codex";
+export const DEFAULT_PROVIDER_KIND: ProviderKind = "pi";
 
 export const CodexModelSelection = Schema.Struct({
   provider: Schema.Literal("codex"),
@@ -144,6 +147,13 @@ export const PiModelSelection = Schema.Struct({
 });
 export type PiModelSelection = typeof PiModelSelection.Type;
 
+export const OpenAICompatibleModelSelection = Schema.Struct({
+  provider: Schema.Literal("openaiCompatible"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optional(Schema.Struct({})),
+});
+export type OpenAICompatibleModelSelection = typeof OpenAICompatibleModelSelection.Type;
+
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
@@ -154,6 +164,7 @@ export const ModelSelection = Schema.Union([
   KiloModelSelection,
   OpenCodeModelSelection,
   PiModelSelection,
+  OpenAICompatibleModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
 
@@ -201,6 +212,10 @@ export const PiProviderStartOptions = Schema.Struct({
   agentDir: Schema.optional(TrimmedNonEmptyString),
 });
 
+export const OpenAICompatibleProviderStartOptions = Schema.Struct({
+  baseUrl: Schema.optional(TrimmedNonEmptyString),
+});
+
 export const ProviderStartOptions = Schema.Struct({
   codex: Schema.optional(CodexProviderStartOptions),
   claudeAgent: Schema.optional(ClaudeProviderStartOptions),
@@ -211,6 +226,7 @@ export const ProviderStartOptions = Schema.Struct({
   kilo: Schema.optional(KiloProviderStartOptions),
   opencode: Schema.optional(OpenCodeProviderStartOptions),
   pi: Schema.optional(PiProviderStartOptions),
+  openaiCompatible: Schema.optional(OpenAICompatibleProviderStartOptions),
 });
 export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 
