@@ -30,6 +30,7 @@ export type ResolvedProviderCredential = {
 export const PORTLOG_OAUTH_CATALOGUE_IDS = [
   "anthropic",
   "openai-codex",
+  "cursor",
   "xai",
   "xai-oauth",
 ] as const;

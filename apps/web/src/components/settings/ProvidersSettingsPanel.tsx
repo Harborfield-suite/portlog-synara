@@ -127,6 +127,16 @@ type ProviderInstallSettings = {
   readonly fields: readonly ProviderInstallField[];
 };
 
+type NativeOAuthProvider = "openai-codex" | "cursor";
+
+export function nativeOAuthProviderForProviderKind(
+  provider: ProviderKind,
+): NativeOAuthProvider | null {
+  if (provider === "codex") return "openai-codex";
+  if (provider === "cursor") return "cursor";
+  return null;
+}
+
 const PROVIDER_VISIBILITY_OPTIONS: ReadonlyArray<{ provider: ProviderKind; title: string }> =
   PROVIDER_DESCRIPTORS.map((descriptor) => ({
     provider: descriptor.kind,
@@ -696,6 +706,8 @@ function ProviderToolRow(props: {
   updatingProviders: ReadonlySet<ProviderKind>;
   onOpenChange: (open: boolean) => void;
   onUpdate: (provider: ProviderKind) => void;
+  oauthBusyProvider: NativeOAuthProvider | null;
+  onOAuthAction: (provider: NativeOAuthProvider, action: "login" | "logout") => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
 }) {
   const title = PROVIDER_DISPLAY_NAMES[props.config.provider];
@@ -734,6 +746,9 @@ function ProviderToolRow(props: {
     ? shouldOfferProviderUpdateAction(props.providerStatus) &&
       !isProviderLatestVersionKnowable(props.providerStatus)
     : false;
+  const oauthProvider = nativeOAuthProviderForProviderKind(props.config.provider);
+  const oauthBusy = oauthProvider !== null && props.oauthBusyProvider === oauthProvider;
+  const oauthConnected = props.providerStatus?.authStatus === "authenticated";
 
   return (
     <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
@@ -778,6 +793,34 @@ function ProviderToolRow(props: {
           <div className="border-t border-border/70 bg-muted/20 px-3 py-3">
             <div className="space-y-3">
               <ProviderDocsLinks docs={props.config.docs} />
+              {oauthProvider ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 bg-background/60 px-3 py-2">
+                  <div className="min-w-0 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">OAuth access</span>
+                    <span className="ml-2">{oauthConnected ? "Authenticated" : "Not authenticated"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={props.oauthBusyProvider !== null}
+                      onClick={() => props.onOAuthAction(oauthProvider, "login")}
+                    >
+                      {oauthBusy ? "Waiting…" : "Log in with OAuth"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={props.oauthBusyProvider !== null || !oauthConnected}
+                      onClick={() => props.onOAuthAction(oauthProvider, "logout")}
+                    >
+                      {oauthBusy ? "Waiting…" : "Log out"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
               {showProviderUpdateStatus && updateAdvisory?.status === "behind_latest" ? (
                 <div className="text-xs text-muted-foreground">
                   {updateAdvisory.canUpdate && updateAdvisory.updateCommand ? (
@@ -841,6 +884,7 @@ export function ProvidersSettingsPanel({
   const [updatingProviders, setUpdatingProviders] = useState<ReadonlySet<ProviderKind>>(
     () => new Set(),
   );
+  const [oauthBusyProvider, setOauthBusyProvider] = useState<NativeOAuthProvider | null>(null);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
     [settings.hiddenProviders],
@@ -903,6 +947,29 @@ export function ProvidersSettingsPanel({
       updateSettings({ providerOrder: arrayMove([...settings.providerOrder], fromIndex, toIndex) });
     },
     [settings.providerOrder, updateSettings],
+  );
+
+  const runProviderOAuth = useCallback(
+    async (provider: NativeOAuthProvider, action: "login" | "logout") => {
+      if (oauthBusyProvider !== null) return;
+      setOauthBusyProvider(provider);
+      try {
+        const api = ensureNativeApi();
+        if (action === "login") await api.server.startByokOAuth({ provider });
+        else await api.server.logoutByokOAuth({ provider });
+        await api.server.refreshProviders();
+        await queryClient.invalidateQueries({ queryKey: serverQueryKeys.config() });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `${action === "login" ? "OAuth login" : "OAuth logout"} failed`,
+          description: error instanceof Error ? error.message : "The OAuth action failed.",
+        });
+      } finally {
+        setOauthBusyProvider(null);
+      }
+    },
+    [oauthBusyProvider, queryClient],
   );
 
   const runProviderUpdate = useCallback(
@@ -1141,6 +1208,8 @@ export function ProvidersSettingsPanel({
                       }))
                     }
                     onUpdate={(provider) => void runProviderUpdate(provider)}
+                    oauthBusyProvider={oauthBusyProvider}
+                    onOAuthAction={(provider, action) => void runProviderOAuth(provider, action)}
                     updateSettings={updateSettings}
                   />
                 ))}

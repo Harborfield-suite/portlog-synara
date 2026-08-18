@@ -30,8 +30,12 @@ describe("providerConnection", () => {
     expect(maskApiKeySuffix("sk-or-abcdefghijklmnop72FQ")).toBe("••••••••••72FQ");
   });
 
-  it("supports oauth+api-key for Anthropic and api-key for OpenRouter", () => {
+  it("supports oauth+api-key for OAuth providers and api-key for OpenRouter", () => {
     expect(supportedAuthForProvider({ providerId: "anthropic", isLocal: false })).toEqual([
+      "oauth",
+      "api-key",
+    ]);
+    expect(supportedAuthForProvider({ providerId: "cursor", isLocal: false })).toEqual([
       "oauth",
       "api-key",
     ]);

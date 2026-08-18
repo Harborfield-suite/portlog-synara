@@ -5,9 +5,18 @@ import { type AppSettings, AppSettingsSchema } from "~/appSettings";
 import {
   createProviderInstallResetPatch,
   isProviderInstallSettingsDirty,
+  nativeOAuthProviderForProviderKind,
 } from "./ProvidersSettingsPanel";
 
 const defaults = AppSettingsSchema.makeUnsafe({});
+
+describe("nativeOAuthProviderForProviderKind", () => {
+  it("maps the native CLI providers to their OAuth identities", () => {
+    expect(nativeOAuthProviderForProviderKind("codex")).toBe("openai-codex");
+    expect(nativeOAuthProviderForProviderKind("cursor")).toBe("cursor");
+    expect(nativeOAuthProviderForProviderKind("claudeAgent")).toBeNull();
+  });
+});
 
 describe("isProviderInstallSettingsDirty", () => {
   it("covers every provider install text and boolean field", () => {

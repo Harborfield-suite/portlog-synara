@@ -30,7 +30,7 @@ export function supportedByokOAuthProvider(provider: string): provider is ByokOA
   return byokOAuthCommand(provider, "login") !== null;
 }
 
-/** Launches the provider-owned browser/callback flow without passing secrets. */
+/** Runs the provider-owned browser/callback flow without passing secrets. */
 export function launchByokOAuth(
   provider: string,
   action: "login" | "logout",
@@ -40,14 +40,27 @@ export function launchByokOAuth(
 
   return new Promise((resolve, reject) => {
     const child = spawn(command.executable, [...command.args], {
-      detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.unref();
-      resolve(command);
+    let settled = false;
+    child.once("error", (error) => {
+      settled = true;
+      reject(error);
+    });
+    child.once("close", (code, signal) => {
+      if (settled) return;
+      if (code === 0) {
+        resolve(command);
+        return;
+      }
+      reject(
+        new Error(
+          `${command.executable} ${command.args.join(" ")} exited with ${
+            signal ? `signal ${signal}` : `code ${code ?? "unknown"}`
+          }.`,
+        ),
+      );
     });
   });
 }

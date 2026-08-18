@@ -1588,6 +1588,7 @@ const makeWsRpcHandlersLayer = () =>
               const oauthByCatalogueId = {
                 anthropic: statuses.find((entry) => entry.provider === "claudeAgent"),
                 "openai-codex": statuses.find((entry) => entry.provider === "codex"),
+                cursor: statuses.find((entry) => entry.provider === "cursor"),
               } as const;
 
               const providers = yield* Effect.forEach(
@@ -1599,7 +1600,9 @@ const makeWsRpcHandlersLayer = () =>
                     const lastProbe = yield* providerCredentials.getByokCredentialHealth(entry.id);
                     const envValue = envValueForProvider(entry.id);
                     const oauthStatus =
-                      entry.id === "anthropic" || entry.id === "openai-codex"
+                      entry.id === "anthropic" ||
+                      entry.id === "openai-codex" ||
+                      entry.id === "cursor"
                         ? oauthByCatalogueId[entry.id]
                         : undefined;
                     const oauthConnected = Boolean(
@@ -1640,21 +1643,23 @@ const makeWsRpcHandlersLayer = () =>
           ),
         [WS_METHODS.serverStartByokOAuth]: (input) =>
           rpcEffect(
-            Effect.promise(async () => {
-              const command = await launchByokOAuth(input.provider, "login");
+            Effect.gen(function* () {
+              const command = yield* Effect.promise(() => launchByokOAuth(input.provider, "login"));
+              yield* providerHealth.refresh;
               return { provider: input.provider, ...command, args: [...command.args] };
             }),
-            "Failed to start BYOK OAuth login",
+            "Failed to complete BYOK OAuth login",
           ),
         [WS_METHODS.serverLogoutByokOAuth]: (input) =>
           rpcEffect(
-            Effect.promise(async () => {
-              const command = await launchByokOAuth(input.provider, "logout");
+            Effect.gen(function* () {
+              const command = yield* Effect.promise(() => launchByokOAuth(input.provider, "logout"));
               clearByokOauthConnected(input.provider);
               clearByokProbe(input.provider);
+              yield* providerHealth.refresh;
               return { provider: input.provider, ...command, args: [...command.args] };
             }),
-            "Failed to log out of BYOK OAuth",
+            "Failed to complete BYOK OAuth logout",
           ),
         [WS_METHODS.serverListByokModels]: (input) =>
           rpcEffect(
