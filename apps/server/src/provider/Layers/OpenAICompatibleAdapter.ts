@@ -137,12 +137,17 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
               Effect.catch(() => Effect.succeed(null)),
             ),
           );
+    const secretKey =
+      settings.secretProtectionMode === "off"
+        ? null
+        : yield* loadSecretProtectionKey(secretStore).pipe(Effect.orDie);
+    if (secretKey?.warning) yield* Effect.logWarning(secretKey.warning);
     const secretProtection: SecretProtectionConfig | null =
       settings.secretProtectionMode === "off"
         ? null
         : {
             mode: settings.secretProtectionMode,
-            ...(yield* loadSecretProtectionKey(secretStore).pipe(Effect.orDie)),
+            key: secretKey!.key,
             candidates: collectSecretCandidates({
               environment: process.env,
               secretsFile: secretFiles,
