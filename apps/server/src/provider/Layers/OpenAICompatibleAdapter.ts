@@ -18,7 +18,7 @@ import {
   type ProviderSession,
   type ProviderTurnStartResult,
 } from "@synara/contracts";
-import { Effect, Layer, Queue, Stream } from "effect";
+import { Effect, Layer, Option, Queue, Stream } from "effect";
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -81,7 +81,7 @@ function makeEventBase(context: SessionContext, turnId?: TurnId) {
 const makeOpenAICompatibleAdapter = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const credentials = yield* ProviderCredentials;
-  const secretStore = yield* ServerSecretStore;
+  const secretStore = yield* Effect.serviceOption(ServerSecretStore);
   const settingsService = yield* ServerSettingsService;
   const runtimeEventQueue = yield* Queue.bounded<ProviderRuntimeEvent>(
     PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY,
@@ -140,7 +140,7 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
     const secretKey =
       settings.secretProtectionMode === "off"
         ? null
-        : yield* loadSecretProtectionKey(secretStore).pipe(Effect.orDie);
+        : yield* loadSecretProtectionKey(Option.getOrUndefined(secretStore)).pipe(Effect.orDie);
     if (secretKey?.warning) yield* Effect.logWarning(secretKey.warning);
     const secretProtection: SecretProtectionConfig | null =
       settings.secretProtectionMode === "off"

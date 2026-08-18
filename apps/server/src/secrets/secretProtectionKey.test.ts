@@ -19,6 +19,13 @@ describe("secretProtectionKey", () => {
     expect(result).toEqual({ key, persistent: true, warning: null });
   });
 
+  it("falls back to an ephemeral key when no secret store is available", async () => {
+    const result = await Effect.runPromise(loadSecretProtectionKey());
+    expect(result.key).toHaveLength(32);
+    expect(result.persistent).toBe(false);
+    expect(result.warning).toContain("stable across restart");
+  });
+
   it("falls back to an ephemeral key with a warning", async () => {
     const result = await Effect.runPromise(
       loadSecretProtectionKey({

@@ -12,8 +12,16 @@ export type SecretProtectionKeyResolution = {
 };
 
 export function loadSecretProtectionKey(
-  store: Pick<ServerSecretStoreShape, "getOrCreateRandom">,
+  store?: Pick<ServerSecretStoreShape, "getOrCreateRandom">,
 ): Effect.Effect<SecretProtectionKeyResolution, never> {
+  if (!store) {
+    return Effect.succeed({
+      key: randomBytes(32),
+      persistent: false,
+      warning: "Secret placeholders will not remain stable across restart.",
+    });
+  }
+
   return store.getOrCreateRandom(SECRET_PROTECTION_KEY_NAME, 32).pipe(
     Effect.map((key) => ({ key, persistent: true, warning: null })),
     Effect.catch(() =>
