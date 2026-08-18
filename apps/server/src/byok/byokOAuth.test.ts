@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { byokOAuthCommand, supportedByokOAuthProvider } from "./byokOAuth.ts";
+import {
+  byokOAuthCommand,
+  oauthExecutableMissingMessage,
+  resolveByokOAuthCommand,
+  supportedByokOAuthProvider,
+} from "./byokOAuth.ts";
 
 describe("BYOK OAuth commands", () => {
   it.each([
@@ -9,6 +14,26 @@ describe("BYOK OAuth commands", () => {
   ] as const)("maps %s to its native login command", (provider, executable, args) => {
     expect(byokOAuthCommand(provider, "login")).toEqual({ executable, args });
     expect(supportedByokOAuthProvider(provider)).toBe(true);
+  });
+
+  it("resolves Cursor editor overrides to the native agent command", () => {
+    expect(resolveByokOAuthCommand("cursor", "login", "agent")).toEqual({
+      executable: "cursor-agent",
+      args: ["login"],
+    });
+    expect(resolveByokOAuthCommand("cursor", "logout", "cursor-agent")).toEqual({
+      executable: "cursor-agent",
+      args: ["logout"],
+    });
+  });
+
+  it("explains missing provider executables", () => {
+    expect(oauthExecutableMissingMessage("cursor", "cursor-agent")).toContain(
+      "Install Cursor CLI",
+    );
+    expect(oauthExecutableMissingMessage("openai-codex", "codex")).toContain(
+      "codex was not found",
+    );
   });
 
   it("keeps logout provider-scoped and rejects unsupported providers", () => {
