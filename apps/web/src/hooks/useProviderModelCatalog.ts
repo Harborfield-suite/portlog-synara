@@ -20,6 +20,7 @@ import {
   providerAgentsQueryOptions,
   providerModelsQueryOptions,
 } from "../lib/providerDiscoveryReactQuery";
+import { serverByokCatalogGroupsQueryOptions } from "../lib/serverReactQuery";
 import { mergeDynamicModelOptions, type ProviderModelOption } from "../providerModelOptions";
 
 export interface ProviderModelCatalog {
@@ -74,6 +75,24 @@ export function useProviderModelCatalog(input: {
   const discoveryCwd = input.cwd ?? null;
   const { settings, serverSettings } = useAppSettings();
   const customModelsByProvider = useMemo(() => getCustomModelsByProvider(settings), [settings]);
+  const byokCatalogQuery = useQuery({
+    ...serverByokCatalogGroupsQueryOptions(),
+    enabled: selectedProvider === "openaiCompatible",
+  });
+  const selectedByokModels = useMemo(() => {
+    if (selectedProvider !== "openaiCompatible") return [];
+    const selectedGroup = byokCatalogQuery.data?.groups.find(
+      (group) => group.id === settings.openaiCompatibleCatalogProviderId,
+    );
+    return (
+      selectedGroup?.models.map((model) => ({
+        slug: model.id,
+        name: model.name,
+        upstreamProviderId: selectedGroup.id,
+        upstreamProviderName: selectedGroup.name,
+      })) ?? []
+    );
+  }, [byokCatalogQuery.data?.groups, selectedProvider, settings.openaiCompatibleCatalogProviderId]);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
     [settings.hiddenProviders],
@@ -305,6 +324,13 @@ export function useProviderModelCatalog(input: {
       ProviderKind,
       ReadonlyArray<ProviderModelOption & { isCustom?: boolean }>
     > = { ...staticOptions };
+    if (selectedByokModels.length > 0) {
+      result.openaiCompatible = mergeDynamicModelOptions({
+        provider: "openaiCompatible",
+        staticOptions: staticOptions.openaiCompatible,
+        dynamicModels: selectedByokModels,
+      });
+    }
     const dynamicSources: Record<ProviderKind, typeof claudeDynamicModelsQuery.data> = {
       claudeAgent: claudeDynamicModelsQuery.data,
       codex: codexDynamicModelsQuery.data,
@@ -354,6 +380,7 @@ export function useProviderModelCatalog(input: {
     modelHintByProvider,
     openCodeDynamicModelsQuery.data,
     piDynamicModelsQuery.data,
+    selectedByokModels,
   ]);
 
   const loadingModelProviders = useMemo<Partial<Record<ProviderKind, boolean>>>(
@@ -364,14 +391,17 @@ export function useProviderModelCatalog(input: {
       kilo: kiloModelDiscoveryPending,
       opencode: openCodeModelDiscoveryPending,
       pi: piModelDiscoveryPending,
+      openaiCompatible: selectedProvider === "openaiCompatible" && byokCatalogQuery.isLoading,
     }),
     [
       antigravityModelDiscoveryPending,
       cursorModelDiscoveryPending,
       droidModelDiscoveryPending,
       kiloModelDiscoveryPending,
+      byokCatalogQuery.isLoading,
       openCodeModelDiscoveryPending,
       piModelDiscoveryPending,
+      selectedProvider,
     ],
   );
 
@@ -434,23 +464,25 @@ export function useProviderModelCatalog(input: {
   const selectedProviderRuntimeModelDiscoveryPending =
     loadingModelProviders[selectedProvider] ?? false;
   const selectedProviderModelsQuery =
-    selectedProvider === "claudeAgent"
-      ? claudeDynamicModelsQuery
-      : selectedProvider === "codex"
-        ? codexDynamicModelsQuery
-        : selectedProvider === "cursor"
-          ? cursorDynamicModelsQuery
-          : selectedProvider === "antigravity"
-            ? antigravityModelsQuery
-            : selectedProvider === "grok"
-              ? grokDynamicModelsQuery
-              : selectedProvider === "droid"
-                ? droidDynamicModelsQuery
-                : selectedProvider === "kilo"
-                  ? kiloDynamicModelsQuery
-                  : selectedProvider === "opencode"
-                    ? openCodeDynamicModelsQuery
-                    : piDynamicModelsQuery;
+    selectedProvider === "openaiCompatible"
+      ? byokCatalogQuery
+      : selectedProvider === "claudeAgent"
+        ? claudeDynamicModelsQuery
+        : selectedProvider === "codex"
+          ? codexDynamicModelsQuery
+          : selectedProvider === "cursor"
+            ? cursorDynamicModelsQuery
+            : selectedProvider === "antigravity"
+              ? antigravityModelsQuery
+              : selectedProvider === "grok"
+                ? grokDynamicModelsQuery
+                : selectedProvider === "droid"
+                  ? droidDynamicModelsQuery
+                  : selectedProvider === "kilo"
+                    ? kiloDynamicModelsQuery
+                    : selectedProvider === "opencode"
+                      ? openCodeDynamicModelsQuery
+                      : piDynamicModelsQuery;
   const selectedProviderModelsLoading =
     selectedProviderRuntimeModelDiscoveryPending ||
     (loadingModelProviders[selectedProvider] === undefined &&

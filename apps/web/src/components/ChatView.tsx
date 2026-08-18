@@ -2171,11 +2171,13 @@ export default function ChatView({
       activeThread.messages.length > 0 ||
       activeThread.session !== null),
   );
-  const lockedProvider: ProviderKind | null = hasThreadStarted
-    ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
-    : null;
+  // Provider changes are composer drafts until the next turn; the server swaps
+  // the live session then and bootstraps the retained transcript.
   const selectedProvider: ProviderKind =
-    lockedProvider ?? selectedProviderByThreadId ?? threadProvider ?? settings.defaultProvider;
+    selectedProviderByThreadId ??
+    sessionProvider ??
+    threadProvider ??
+    settings.defaultProvider;
   const previousSelectedProviderRef = useRef<{
     threadId: ThreadId;
     provider: ProviderKind;
@@ -2204,6 +2206,7 @@ export default function ChatView({
       kilo: resolveHint("kilo"),
       opencode: resolveHint("opencode"),
       pi: resolveHint("pi"),
+      openaiCompatible: resolveHint("openaiCompatible"),
     };
   }, [
     activeProject?.defaultModelSelection,
@@ -2343,10 +2346,8 @@ export default function ChatView({
         providerOrder: settings.providerOrder,
         hiddenProviders: settings.hiddenProviders,
         protectedProviders: [selectedProvider],
-        lockedProvider,
       }),
     [
-      lockedProvider,
       modelOptionsByProvider,
       selectedProvider,
       settings.hiddenProviders,
@@ -6158,10 +6159,6 @@ export default function ChatView({
   const onProviderModelSelect = useCallback(
     async (provider: ProviderKind, model: ModelSlug) => {
       if (!activeThread) return;
-      if (lockedProvider !== null && provider !== lockedProvider) {
-        scheduleComposerFocus();
-        return;
-      }
       const resolvedModel = resolveCommittedProviderModel({
         selectedModel: model,
         availableOptions: modelOptionsByProvider[provider],
@@ -6209,7 +6206,6 @@ export default function ChatView({
     [
       activeThread,
       customModelsByProvider,
-      lockedProvider,
       modelOptionsByProvider,
       persistRuntimeModeChange,
       providerStatuses,
@@ -9269,7 +9265,7 @@ export default function ChatView({
   // let the measured-overflow loop demote again before paint if needed.
   const composerFooterModelLabel = resolveProviderModelLabel({
     provider: selectedProvider,
-    lockedProvider,
+    lockedProvider: null,
     model: selectedModelForPickerWithCustomFallback,
     modelOptionsByProvider,
   });
@@ -9335,7 +9331,7 @@ export default function ChatView({
         hideLabel={!composerFooterControlsPlan.showModelLabel}
         provider={selectedProvider}
         model={selectedModelForPickerWithCustomFallback}
-        lockedProvider={lockedProvider}
+        lockedProvider={null}
         providers={providerStatuses}
         modelOptionsByProvider={modelOptionsByProvider}
         loadingModelProviders={loadingModelProviders}
@@ -9372,7 +9368,7 @@ export default function ChatView({
       hideStatusLabel={!composerFooterControlsPlan.showTraitsLabel}
       provider={selectedProvider}
       model={selectedModelForPickerWithCustomFallback}
-      lockedProvider={lockedProvider}
+      lockedProvider={null}
       providers={providerStatuses}
       modelOptionsByProvider={modelOptionsByProvider}
       loadingModelProviders={loadingModelProviders}
@@ -10673,7 +10669,7 @@ export default function ChatView({
         <ProviderModelViewer
           provider={selectedProvider}
           model={selectedModelForPickerWithCustomFallback}
-          lockedProvider={lockedProvider}
+          lockedProvider={null}
           providers={providerStatuses}
           modelOptionsByProvider={modelOptionsByProvider}
           loadingModelProviders={loadingModelProviders}
