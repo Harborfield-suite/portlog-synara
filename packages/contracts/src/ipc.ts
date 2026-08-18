@@ -140,6 +140,8 @@ import type {
   ServerListProviderUsageInput,
   ServerListProviderUsageResult,
   ServerGetSettingsResult,
+  ServerListByokCatalogGroupsInput,
+  ServerListByokCatalogGroupsResult,
   ServerListByokModelsInput,
   ServerListByokModelsResult,
   ServerListByokProvidersResult,
@@ -708,6 +710,9 @@ export interface NativeApi {
     ) => Promise<ExternalMcpCreateIntegrationResult>;
     refreshProviders: () => Promise<ServerRefreshProvidersResult>;
     listByokProviders: () => Promise<ServerListByokProvidersResult>;
+    listByokCatalogGroups: (
+      input: ServerListByokCatalogGroupsInput,
+    ) => Promise<ServerListByokCatalogGroupsResult>;
     listByokModels: (input: ServerListByokModelsInput) => Promise<ServerListByokModelsResult>;
     setByokApiKey: (input: ServerSetByokApiKeyInput) => Promise<ServerSetByokApiKeyResult>;
     testByokConnection: (

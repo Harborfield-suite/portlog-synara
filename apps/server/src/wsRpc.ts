@@ -35,7 +35,8 @@ import { RpcMiddleware, RpcSchema, RpcSerialization, RpcServer } from "effect/un
 
 import { AutomationService } from "./automation/Services/AutomationService";
 import { authErrorResponse, makeEffectAuthRequest } from "./auth/effectHttp";
-import { byokProviderModels, byokCatalogProvider } from "./byok/byokCatalog.ts";
+import { byokProviderModels, byokCatalogProvider, loadByokCatalog } from "./byok/byokCatalog.ts";
+import { listByokCatalogGroups } from "./byok/byokCatalogGroups.ts";
 import { listByokModelsForProvider } from "./byok/listByokModels.ts";
 import {
   isByokOauthConnected,
@@ -1581,6 +1582,7 @@ const makeWsRpcHandlersLayer = () =>
         [WS_METHODS.serverListByokProviders]: () =>
           rpcEffect(
             Effect.gen(function* () {
+              const metadata = loadByokCatalog().metadata;
               const statuses = yield* providerHealth.getStatuses.pipe(Effect.orDie);
               const oauthByCatalogueId = {
                 anthropic: statuses.find((entry) => entry.provider === "claudeAgent"),
@@ -1619,9 +1621,19 @@ const makeWsRpcHandlersLayer = () =>
                     return snapshot;
                   }),
               );
-              return { providers };
+              return { providers, metadata };
             }),
             "Failed to list BYOK providers",
+          ),
+        [WS_METHODS.serverListByokCatalogGroups]: (input) =>
+          rpcEffect(
+            Effect.sync(() => ({
+              groups: listByokCatalogGroups(
+                input.query === undefined ? {} : { query: input.query },
+              ),
+              metadata: loadByokCatalog().metadata,
+            })),
+            "Failed to list BYOK catalog groups",
           ),
         [WS_METHODS.serverListByokModels]: (input) =>
           rpcEffect(

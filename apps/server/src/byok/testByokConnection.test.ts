@@ -30,6 +30,18 @@ describe("testByokConnection", () => {
     ).resolves.toEqual({ kind: "invalid-credential" });
   });
 
+  it("classifies provider 5xx responses as transient network failures", async () => {
+    const fetchImpl = vi.fn(async () => new Response("busy", { status: 503 }));
+
+    await expect(
+      testByokConnection({
+        providerId: "openrouter",
+        apiKey: "sk-good",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ kind: "network" });
+  });
+
   it("returns endpoint-offline when a local provider cannot be reached", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");

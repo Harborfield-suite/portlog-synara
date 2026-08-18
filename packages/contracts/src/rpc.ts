@@ -163,6 +163,8 @@ import {
   ServerListProviderUsageResult,
   ServerLifecycleStreamEvent,
   ServerGetSettingsResult,
+  ServerListByokCatalogGroupsInput,
+  ServerListByokCatalogGroupsResult,
   ServerListByokModelsInput,
   ServerListByokModelsResult,
   ServerListByokProvidersResult,
@@ -740,6 +742,12 @@ export const WsServerListByokProvidersRpc = Rpc.make(WS_METHODS.serverListByokPr
   error: WsRpcError,
 });
 
+export const WsServerListByokCatalogGroupsRpc = Rpc.make(WS_METHODS.serverListByokCatalogGroups, {
+  payload: ServerListByokCatalogGroupsInput,
+  success: ServerListByokCatalogGroupsResult,
+  error: WsRpcError,
+});
+
 export const WsServerListByokModelsRpc = Rpc.make(WS_METHODS.serverListByokModels, {
   payload: ServerListByokModelsInput,
   success: ServerListByokModelsResult,
@@ -1125,6 +1133,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerListByokProvidersRpc,
+  WsServerListByokCatalogGroupsRpc,
   WsServerListByokModelsRpc,
   WsServerSetByokApiKeyRpc,
   WsServerTestByokConnectionRpc,

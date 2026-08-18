@@ -11,6 +11,7 @@ import {
   portlogOmpCatalogId,
   type PortLogOmpProviderDef,
 } from "./ompProviderRegistry.ts";
+import { curatedByokProvider } from "./byokToolModelCatalog.ts";
 
 export type ByokCatalogWire = "openai" | "anthropic" | "gemini";
 
@@ -33,7 +34,14 @@ export type ByokCatalogProvider = {
   readonly is_local?: boolean;
 };
 
+export type ByokCatalogMetadata = {
+  readonly catalogRevision: string;
+  readonly ompRevision: string;
+  readonly syncDate: string;
+};
+
 export type ByokCatalog = {
+  readonly metadata: ByokCatalogMetadata;
   readonly featured: ReadonlyArray<string>;
   readonly providers: Readonly<Record<string, ByokCatalogProvider>>;
 };
@@ -97,17 +105,60 @@ function catalogPath(): string {
   return resolve(here, "..", "..", "data", "model_catalog.json");
 }
 
+function parseCatalogMetadata(value: unknown): ByokCatalogMetadata {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(
+      "Invalid BYOK catalog metadata: expected catalogRevision, ompRevision, and syncDate strings.",
+    );
+  }
+  const metadata = value as Record<string, unknown>;
+  if (
+    typeof metadata.catalogRevision !== "string" ||
+    metadata.catalogRevision.trim() === "" ||
+    typeof metadata.ompRevision !== "string" ||
+    metadata.ompRevision.trim() === "" ||
+    typeof metadata.syncDate !== "string" ||
+    metadata.syncDate.trim() === ""
+  ) {
+    throw new Error(
+      "Invalid BYOK catalog metadata: expected catalogRevision, ompRevision, and syncDate strings.",
+    );
+  }
+  const parsedSyncDate = new Date(`${metadata.syncDate}T00:00:00.000Z`);
+  const [year, month, day] = metadata.syncDate.split("-").map(Number);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(metadata.syncDate) ||
+    Number.isNaN(parsedSyncDate.getTime()) ||
+    parsedSyncDate.getUTCFullYear() !== year ||
+    parsedSyncDate.getUTCMonth() !== month - 1 ||
+    parsedSyncDate.getUTCDate() !== day
+  ) {
+    throw new Error(
+      "Invalid BYOK catalog metadata: syncDate must be an ISO date (YYYY-MM-DD).",
+    );
+  }
+  return {
+    catalogRevision: metadata.catalogRevision,
+    ompRevision: metadata.ompRevision,
+    syncDate: metadata.syncDate,
+  };
+}
+
 export function loadByokCatalog(catalogFilePath = catalogPath()): ByokCatalog {
   if (cached && catalogFilePath === catalogPath()) return cached;
   const raw = JSON.parse(readFileSync(catalogFilePath, "utf-8")) as {
+    metadata: unknown;
     featured: string[];
     providers: Record<string, ByokCatalogProvider>;
   };
+  const metadata = parseCatalogMetadata(raw.metadata);
   const ompSynthetics = buildOmpSynthetics(raw.providers);
-  const mergedProviders = {
-    ...raw.providers,
-    ...ompSynthetics,
-  };
+  const mergedProviders = Object.fromEntries(
+    Object.entries({
+      ...raw.providers,
+      ...ompSynthetics,
+    }).map(([id, provider]) => [id, curatedByokProvider(id, provider)]),
+  ) as Record<string, ByokCatalogProvider>;
   // OMP registry order is the PortLog face; models.dev featured fills any gaps.
   const ompIds = PORTLOG_OMP_PROVIDER_REGISTRY.map((entry) => entry.id).filter(
     (id) => mergedProviders[id],
@@ -118,6 +169,7 @@ export function loadByokCatalog(catalogFilePath = catalogPath()): ByokCatalog {
     ...raw.featured.filter((id) => mergedProviders[id] && !ompSet.has(id)),
   ];
   const catalog: ByokCatalog = {
+    metadata,
     featured,
     providers: mergedProviders,
   };

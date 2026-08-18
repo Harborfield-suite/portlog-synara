@@ -64,6 +64,7 @@ import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { DebouncedSettingTextInput } from "./DebouncedSettingTextInput";
+import { ByokModelCatalogPanel } from "./ByokModelCatalogPanel";
 import { SettingResetButton, useSettingsRestoreSignal } from "./SettingControls";
 import { SettingsListRow, SettingsRow, SettingsSection } from "./SettingsPanelPrimitives";
 
@@ -1093,6 +1094,8 @@ export function ProvidersSettingsPanel({
           </DndContext>
         </SettingsRow>
       </SettingsSection>
+
+      <ByokModelCatalogPanel settings={settings} updateSettings={updateSettings} />
 
       <div>
         <SettingsSection title="Provider tools">

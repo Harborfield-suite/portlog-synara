@@ -14,6 +14,11 @@ import { testByokConnection } from "./testByokConnection.ts";
 const probeCache = new Map<string, ProviderProbeResult>();
 
 export function rememberByokProbe(providerId: string, result: ProviderProbeResult): void {
+  // Network/endpoint failures are transient: retain the last definitive health
+  // result so a temporary outage cannot turn a previously valid provider gray.
+  if (result.kind === "network" || result.kind === "endpoint-offline") {
+    return;
+  }
   probeCache.set(providerId.trim(), result);
 }
 
@@ -98,8 +103,8 @@ export function buildByokProviderConnectionSnapshot(input: {
     storedKey: input.storedKey,
     envValue: input.envValue,
     lastProbe: getRememberedByokProbe(input.providerId),
-    oauthConnected: input.oauthConnected,
-    oauthAccountLabel: input.oauthAccountLabel,
+    ...(input.oauthConnected === undefined ? {} : { oauthConnected: input.oauthConnected }),
+    ...(input.oauthAccountLabel === undefined ? {} : { oauthAccountLabel: input.oauthAccountLabel }),
   });
   return {
     id: input.providerId,

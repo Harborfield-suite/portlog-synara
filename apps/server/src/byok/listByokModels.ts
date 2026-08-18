@@ -1,14 +1,11 @@
 /**
- * Unified BYOK model listing: vendored catalogue + live OpenRouter / Gateway.
- * Returns vendored models immediately when live discovery fails or times out.
+ * Unified BYOK model listing from the checked-in catalog.
+ *
+ * Discovery options remain accepted for caller compatibility, but this
+ * PortLog path is intentionally deterministic and offline.
  */
 
 import { byokProviderModels, type ByokCatalogModel } from "./byokCatalog.ts";
-import { fetchOpenRouterModels } from "./openRouterModels.ts";
-import {
-  fetchVercelGatewayModels,
-  VERCEL_AI_GATEWAY_PROVIDER_ID,
-} from "./vercelGatewayModels.ts";
 
 export type ListedByokModel = ByokCatalogModel & {
   readonly toolCapable?: boolean;
@@ -22,34 +19,13 @@ function withToolFlag(
 
 export async function listByokModelsForProvider(
   provider: string,
-  options?: {
+  _options?: {
+    /** Accepted for compatibility; catalog listing never performs discovery. */
     readonly fetchImpl?: typeof fetch;
+    /** Accepted for compatibility; catalog listing never refreshes remotely. */
     readonly forceRefresh?: boolean;
   },
 ): Promise<ReadonlyArray<ListedByokModel>> {
   const id = provider.trim();
-  if (id === "openrouter") {
-    try {
-      return await fetchOpenRouterModels({
-        fetchImpl: options?.fetchImpl,
-        forceRefresh: options?.forceRefresh,
-      });
-    } catch {
-      return withToolFlag(byokProviderModels("openrouter"));
-    }
-  }
-  if (id === VERCEL_AI_GATEWAY_PROVIDER_ID) {
-    try {
-      return await fetchVercelGatewayModels({
-        fetchImpl: options?.fetchImpl,
-        forceRefresh: options?.forceRefresh,
-      });
-    } catch {
-      return [];
-    }
-  }
-  if (id === "xai-oauth") {
-    return withToolFlag(byokProviderModels("xai"));
-  }
-  return withToolFlag(byokProviderModels(id));
+  return withToolFlag(byokProviderModels(id === "xai-oauth" ? "xai" : id));
 }

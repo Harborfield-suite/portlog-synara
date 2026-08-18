@@ -517,9 +517,46 @@ export const ServerByokProviderIndexEntry = Schema.Struct({
   accountLabel: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
 });
 export type ServerByokProviderIndexEntry = typeof ServerByokProviderIndexEntry.Type;
+export const ServerByokCatalogMetadata = Schema.Struct({
+  catalogRevision: TrimmedNonEmptyString,
+  ompRevision: TrimmedNonEmptyString,
+  syncDate: TrimmedNonEmptyString,
+});
+export type ServerByokCatalogMetadata = typeof ServerByokCatalogMetadata.Type;
+
+export const ServerByokCatalogGroupModel = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  qualifiedId: TrimmedNonEmptyString,
+  context: Schema.NullOr(Schema.Number),
+  reasoning: Schema.Boolean,
+  released: Schema.String,
+  toolCapable: Schema.optional(Schema.Boolean),
+});
+export type ServerByokCatalogGroupModel = typeof ServerByokCatalogGroupModel.Type;
+
+export const ServerByokCatalogGroup = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  doc: Schema.String,
+  models: Schema.Array(ServerByokCatalogGroupModel),
+});
+export type ServerByokCatalogGroup = typeof ServerByokCatalogGroup.Type;
+
+export const ServerListByokCatalogGroupsInput = Schema.Struct({
+  query: Schema.optional(Schema.String),
+});
+export type ServerListByokCatalogGroupsInput = typeof ServerListByokCatalogGroupsInput.Type;
+
+export const ServerListByokCatalogGroupsResult = Schema.Struct({
+  groups: Schema.Array(ServerByokCatalogGroup),
+  metadata: ServerByokCatalogMetadata,
+});
+export type ServerListByokCatalogGroupsResult = typeof ServerListByokCatalogGroupsResult.Type;
 
 export const ServerListByokProvidersResult = Schema.Struct({
   providers: Schema.Array(ServerByokProviderIndexEntry),
+  metadata: ServerByokCatalogMetadata,
 });
 export type ServerListByokProvidersResult = typeof ServerListByokProvidersResult.Type;
 
