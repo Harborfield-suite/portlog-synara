@@ -78,15 +78,32 @@ describe("byokCatalog (OMP models.dev parity)", () => {
   it("leads with the Oh My Pi registry order on the PortLog face", () => {
     resetByokCatalogCacheForTests();
     const catalog = loadByokCatalog();
-    expect(catalog.featured[0]).toBe("azure");
-    expect(catalog.featured).toContain("vercel-ai-gateway");
+    expect(catalog.featured[0]).toBe("openai");
     expect(catalog.featured).toContain("openrouter");
-    expect(catalog.featured).toContain("xai-oauth");
+    expect(catalog.featured).toContain("lm-studio");
+    expect(catalog.featured).not.toContain("xai-oauth");
     expect(Object.keys(catalog.providers).length).toBeGreaterThan(100);
 
     const index = byokProviderIndex();
-    expect(index[0]?.id).toBe("azure");
-    expect(index.some((entry) => entry.id === "vercel-ai-gateway")).toBe(true);
+    expect(index.map((entry) => entry.id)).toEqual([
+      "openai",
+      "anthropic",
+      "google",
+      "openrouter",
+      "xai",
+      "groq",
+      "mistral",
+      "deepseek",
+      "together",
+      "fireworks",
+      "cerebras",
+      "perplexity",
+      "azure",
+      "google-vertex",
+      "ollama",
+      "lm-studio",
+    ]);
+    expect(index.some((entry) => entry.id === "vercel-ai-gateway")).toBe(false);
     expect(index.some((entry) => entry.id === "ollama" && entry.isLocal)).toBe(true);
     expect(index.some((entry) => entry.id === "cursor")).toBe(false);
   });
@@ -101,7 +118,7 @@ describe("byokCatalog (OMP models.dev parity)", () => {
     expect(byokProviderModels("moonshot").length).toBeGreaterThan(0);
   });
   it("exposes curated tool-capable models before credentials are configured", () => {
-    for (const provider of ["deepseek", "mistral", "groq", "google", "vercel-ai-gateway"]) {
+    for (const provider of ["deepseek", "mistral", "groq", "google"]) {
       const models = byokProviderModels(provider);
       expect(models.length, provider).toBeGreaterThan(0);
       expect(models.every((model) => model.toolCapable === true), provider).toBe(true);

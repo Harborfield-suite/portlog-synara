@@ -3,6 +3,7 @@ import {
   type ByokCatalog,
   type ByokCatalogModel,
 } from "./byokCatalog.ts";
+import { portlogSupportedProviderIds } from "./ompProviderRegistry.ts";
 
 export type ByokCatalogGroupModel = ByokCatalogModel & {
   /** Exact catalog identity in provider/model form. */
@@ -27,11 +28,17 @@ function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function orderedProviderIds(catalog: ByokCatalog): ReadonlyArray<string> {
+function orderedProviderIds(
+  catalog: ByokCatalog,
+  supportedOnly: boolean,
+): ReadonlyArray<string> {
+  const supportedProviderIds = new Set(portlogSupportedProviderIds());
   const featured = catalog.featured.filter((id) => catalog.providers[id] !== undefined);
   const featuredSet = new Set(featured);
   const remaining = Object.keys(catalog.providers)
-    .filter((id) => !featuredSet.has(id))
+    .filter(
+      (id) => (!supportedOnly || supportedProviderIds.has(id)) && !featuredSet.has(id),
+    )
     .sort((left, right) => left.localeCompare(right));
 
   return [...featured, ...remaining];
@@ -65,7 +72,7 @@ export function listByokCatalogGroups(
   const catalog = input.catalog ?? loadByokCatalog();
   const query = normalizeSearchText(input.query ?? "");
 
-  return orderedProviderIds(catalog).flatMap((id) => {
+  return orderedProviderIds(catalog, input.catalog === undefined).flatMap((id) => {
     const provider = catalog.providers[id]!;
     const providerMatches =
       query === "" || matchesQuery(id, query) || matchesQuery(provider.name, query);

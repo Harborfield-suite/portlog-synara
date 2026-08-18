@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   PORTLOG_OMP_PROVIDER_REGISTRY,
+  portlogSupportedProviderIds,
   portlogOmpCatalogId,
   type PortLogOmpProviderDef,
 } from "./ompProviderRegistry.ts";
@@ -160,13 +161,14 @@ export function loadByokCatalog(catalogFilePath = catalogPath()): ByokCatalog {
     }).map(([id, provider]) => [id, curatedByokProvider(id, provider)]),
   ) as Record<string, ByokCatalogProvider>;
   // OMP registry order is the PortLog face; models.dev featured fills any gaps.
-  const ompIds = PORTLOG_OMP_PROVIDER_REGISTRY.map((entry) => entry.id).filter(
-    (id) => mergedProviders[id],
-  );
+  const supportedProviderIds = new Set(portlogSupportedProviderIds());
+  const ompIds = portlogSupportedProviderIds().filter((id) => mergedProviders[id]);
   const ompSet = new Set(ompIds);
   const featured = [
     ...ompIds,
-    ...raw.featured.filter((id) => mergedProviders[id] && !ompSet.has(id)),
+    ...raw.featured.filter(
+      (id) => supportedProviderIds.has(id) && mergedProviders[id] && !ompSet.has(id),
+    ),
   ];
   const catalog: ByokCatalog = {
     metadata,
@@ -203,10 +205,11 @@ export function byokCatalogProvider(provider: string): ByokCatalogProvider | nul
  */
 export function byokProviderIndex(): ByokProviderIndexEntry[] {
   const catalog = loadByokCatalog();
+  const supportedProviderIds = new Set(portlogSupportedProviderIds());
   const featured = catalog.featured.filter((id) => catalog.providers[id]);
   const featuredSet = new Set(featured);
   const rest = Object.keys(catalog.providers)
-    .filter((id) => !featuredSet.has(id))
+    .filter((id) => supportedProviderIds.has(id) && !featuredSet.has(id))
     .sort((a, b) => a.localeCompare(b));
   return [...featured, ...rest].map((id) => {
     const provider = catalog.providers[id]!;

@@ -40,6 +40,27 @@ export const PORTLOG_EXCLUDED_OMP_PROVIDER_IDS = [
  * OMP registry order with PortLog exclusions removed and catalogue aliases applied.
  * Synthetic providers (no models.dev row) still appear so users can connect them.
  */
+export const PORTLOG_CURATED_PROVIDER_IDS = [
+  "openai",
+  "anthropic",
+  "google",
+  "openrouter",
+  "xai",
+  "groq",
+  "mistral",
+  "deepseek",
+  "together",
+  "fireworks",
+  "cerebras",
+  "perplexity",
+  "azure",
+  "google-vertex",
+  "ollama",
+  "lm-studio",
+] as const;
+
+const PORTLOG_CURATED_PROVIDER_SET = new Set<string>(PORTLOG_CURATED_PROVIDER_IDS);
+
 export const PORTLOG_OMP_PROVIDER_REGISTRY: ReadonlyArray<PortLogOmpProviderDef> = [
   {
     id: "azure",
@@ -260,4 +281,12 @@ export function isExcludedOmpProvider(providerId: string): boolean {
 
 export function portlogOmpProviderIds(): string[] {
   return PORTLOG_OMP_PROVIDER_REGISTRY.map((entry) => entry.id);
+}
+
+export function portlogSupportedProviderIds(): string[] {
+  return [...PORTLOG_CURATED_PROVIDER_IDS];
+}
+
+export function isPortLogSupportedProvider(providerId: string): boolean {
+  return PORTLOG_CURATED_PROVIDER_SET.has(providerId.trim());
 }

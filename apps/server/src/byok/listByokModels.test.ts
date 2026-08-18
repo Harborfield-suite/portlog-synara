@@ -24,11 +24,11 @@ import { listByokModelsForProvider } from "./listByokModels.ts";
 import { resetVercelGatewayModelsCacheForTests } from "./vercelGatewayModels.ts";
 
 const CURATED_PROVIDER_IDS = [
+  "openai",
   "deepseek",
   "mistral",
   "groq",
   "google",
-  "vercel-ai-gateway",
 ] as const;
 
 const noCredentials: ProviderCredentialsShape = {

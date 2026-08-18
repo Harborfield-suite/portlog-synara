@@ -20,15 +20,15 @@ import { byokCatalogProvider, loadByokCatalog, resetByokCatalogCacheForTests } f
 import { supportedAuthForProvider } from "./providerConnection.ts";
 
 describe("gateway models expansion", () => {
-  it("includes vercel-ai-gateway and xai-oauth synthetic catalogue providers", () => {
+  it("retains non-curated gateway providers for direct compatibility", () => {
     resetByokCatalogCacheForTests();
     const catalog = loadByokCatalog();
-    expect(catalog.featured).toContain("vercel-ai-gateway");
+    expect(catalog.featured).not.toContain("vercel-ai-gateway");
     expect(byokCatalogProvider("vercel-ai-gateway")?.env_var).toBe("AI_GATEWAY_API_KEY");
     expect(byokCatalogProvider("xai-oauth")?.name).toMatch(/xAI/i);
   });
 
-  it("merges live OpenRouter /models into listByokModels (mock HTTP)", async () => {
+  it("keeps the pinned model list separate from optional live OpenRouter discovery", async () => {
     resetOpenRouterModelsCacheForTests();
     const models = Array.from({ length: 45 }, (_, index) => ({
       id: `vendor/model-${index}`,
@@ -43,10 +43,11 @@ describe("gateway models expansion", () => {
     const listed = await listByokModelsForProvider("openrouter", { fetchImpl, forceRefresh: true });
     expect(listed.length).toBeGreaterThan(40);
     expect(listed[0]?.toolCapable).toBe(true);
-    expect(fetchImpl).toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     const cached = await fetchOpenRouterModels({ fetchImpl, forceRefresh: false });
-    expect(cached.length).toBe(listed.length);
+    expect(cached).toHaveLength(models.length);
+    expect(cached.length).not.toBe(listed.length);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
