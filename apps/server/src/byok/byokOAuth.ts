@@ -34,12 +34,15 @@ export function supportedByokOAuthProvider(provider: string): provider is ByokOA
 export function launchByokOAuth(
   provider: string,
   action: "login" | "logout",
+  executableOverride?: string,
 ): Promise<OAuthCommand> {
   const command = byokOAuthCommand(provider, action);
   if (!command) return Promise.reject(new Error(`OAuth is not supported for provider: ${provider}`));
+  const executable = executableOverride?.trim() || command.executable;
+  const launchCommand = { ...command, executable };
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command.executable, [...command.args], {
+    const child = spawn(launchCommand.executable, [...launchCommand.args], {
       stdio: "ignore",
       windowsHide: true,
     });
@@ -51,12 +54,12 @@ export function launchByokOAuth(
     child.once("close", (code, signal) => {
       if (settled) return;
       if (code === 0) {
-        resolve(command);
+        resolve(launchCommand);
         return;
       }
       reject(
         new Error(
-          `${command.executable} ${command.args.join(" ")} exited with ${
+          `${launchCommand.executable} ${launchCommand.args.join(" ")} exited with ${
             signal ? `signal ${signal}` : `code ${code ?? "unknown"}`
           }.`,
         ),

@@ -1644,7 +1644,14 @@ const makeWsRpcHandlersLayer = () =>
         [WS_METHODS.serverStartByokOAuth]: (input) =>
           rpcEffect(
             Effect.gen(function* () {
-              const command = yield* Effect.promise(() => launchByokOAuth(input.provider, "login"));
+              const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+              const executable =
+                input.provider === "openai-codex"
+                  ? settings.providers.codex.binaryPath
+                  : settings.providers.cursor.binaryPath;
+              const command = yield* Effect.promise(() =>
+                launchByokOAuth(input.provider, "login", executable),
+              );
               yield* providerHealth.refresh;
               return { provider: input.provider, ...command, args: [...command.args] };
             }),
@@ -1653,7 +1660,14 @@ const makeWsRpcHandlersLayer = () =>
         [WS_METHODS.serverLogoutByokOAuth]: (input) =>
           rpcEffect(
             Effect.gen(function* () {
-              const command = yield* Effect.promise(() => launchByokOAuth(input.provider, "logout"));
+              const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+              const executable =
+                input.provider === "openai-codex"
+                  ? settings.providers.codex.binaryPath
+                  : settings.providers.cursor.binaryPath;
+              const command = yield* Effect.promise(() =>
+                launchByokOAuth(input.provider, "logout", executable),
+              );
               clearByokOauthConnected(input.provider);
               clearByokProbe(input.provider);
               yield* providerHealth.refresh;
