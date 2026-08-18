@@ -13,6 +13,7 @@ import {
   DEFAULT_SERVER_SETTINGS_VIEW,
   TrimmedNonEmptyString,
   ProviderKind,
+  SecretProtectionMode,
   type ProviderStartOptions,
   type ServerSettingsView,
   type ServerSettingsPatch,
@@ -177,6 +178,7 @@ const PersistedProviderKind = Schema.Literals([
 );
 
 export const AppSettingsSchema = Schema.Struct({
+  secretProtectionMode: SecretProtectionMode.pipe(withDefaults(() => "off")),
   claudeBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   uiDensity: UiDensity.pipe(withDefaults(() => DEFAULT_UI_DENSITY)),
   chatFontSizePx: Schema.Number.pipe(withDefaults(() => DEFAULT_CHAT_FONT_SIZE_PX)),
@@ -585,6 +587,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
 
 function serverSettingsToAppSettings(settings: ServerSettingsView): Partial<AppSettings> {
   return {
+    secretProtectionMode: settings.secretProtectionMode,
     claudeBinaryPath: settings.providers.claudeAgent.binaryPath,
     codexBinaryPath: settings.providers.codex.binaryPath,
     codexHomePath: settings.providers.codex.homePath,
@@ -660,6 +663,9 @@ function appSettingsPatchToServerSettingsPatch(patch: Partial<AppSettings>): Ser
   const providers: MutableServerSettingsProvidersPatch = {};
   const serverPatch: MutableServerSettingsPatch = {};
 
+  if (hasOwn(patch, "secretProtectionMode")) {
+    serverPatch.secretProtectionMode = patch.secretProtectionMode ?? "off";
+  }
   if (hasOwn(patch, "enableAssistantStreaming")) {
     serverPatch.enableAssistantStreaming = Boolean(patch.enableAssistantStreaming);
   }

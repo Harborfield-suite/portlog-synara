@@ -150,6 +150,26 @@ export function ByokModelCatalogPanel(props: {
   return (
     <SettingsSection title="BYOK model catalog">
       <SettingsRow
+        title="Secret protection"
+        description="Keep disabled unless a tool explicitly needs a credential. Obfuscation is reversible only at an authorized injection boundary; replacement is irreversible."
+        control={
+          <select
+            value={props.settings.secretProtectionMode}
+            onChange={(event) =>
+              props.updateSettings({
+                secretProtectionMode: event.target.value as AppSettings["secretProtectionMode"],
+              })
+            }
+            aria-label="Secret protection mode"
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+          >
+            <option value="off">Off</option>
+            <option value="obfuscate">Obfuscate</option>
+            <option value="replace">Replace</option>
+          </select>
+        }
+      />
+      <SettingsRow
         title="Supported models"
         description="Browse the tool-capable models PortLog supports. A provider credential is required before a model can be selected for use."
         status={catalogQuery.isLoading ? "Loading catalog" : `${groups.length} providers`}

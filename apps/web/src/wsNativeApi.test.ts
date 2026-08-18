@@ -298,6 +298,7 @@ describe("wsNativeApi", () => {
 
     const payload = {
       settings: {
+        secretProtectionMode: "off",
         enableAssistantStreaming: true,
         enableProviderUpdateChecks: true,
         defaultThreadEnvMode: "local",

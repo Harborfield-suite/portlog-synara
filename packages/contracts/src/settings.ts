@@ -102,7 +102,11 @@ export const SkillsServerSettings = Schema.Struct({
 });
 export type SkillsServerSettings = typeof SkillsServerSettings.Type;
 
+export const SecretProtectionMode = Schema.Literals(["off", "obfuscate", "replace"]);
+export type SecretProtectionMode = typeof SecretProtectionMode.Type;
+
 export const ServerSettings = Schema.Struct({
+  secretProtectionMode: SecretProtectionMode.pipe(Schema.withDecodingDefault(() => "off")),
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableProviderUpdateChecks: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   defaultThreadEnvMode: ThreadEnvironmentMode.pipe(Schema.withDecodingDefault(() => "local")),
@@ -155,6 +159,7 @@ const ProviderSettingsBasePatch = {
 };
 
 export const ServerSettingsPatch = Schema.Struct({
+  secretProtectionMode: Schema.optionalKey(SecretProtectionMode),
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvironmentMode),
