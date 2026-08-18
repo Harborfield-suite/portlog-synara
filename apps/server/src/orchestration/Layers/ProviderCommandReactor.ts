@@ -8,6 +8,7 @@ import {
   CommandId,
   EventId,
   type ModelSelection,
+  type ServerProviderStatus,
   MessageId,
   type OrchestrationEvent,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
@@ -85,6 +86,7 @@ import {
 } from "../../git/Services/TextGeneration.ts";
 import { resolveTextGenerationInputForSelection } from "../../git/textGenerationSelection.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { ProviderHealth } from "../../provider/Services/ProviderHealth.ts";
 import { resolveProviderDispatchAttachments } from "../../provider/providerAttachmentPaths.ts";
 import { OrchestrationEventDeliveryRepositoryLive } from "../../persistence/Layers/OrchestrationEventDeliveries.ts";
 import { ProjectionPendingInteractionRepositoryLive } from "../../persistence/Layers/ProjectionPendingInteractions.ts";
@@ -462,6 +464,19 @@ function buildGeneratedWorktreeBranchName(raw: string): string {
   return `${WORKTREE_BRANCH_PREFIX}/${safeFragment}`;
 }
 
+export function providerSelectionUnavailable(
+  status: ServerProviderStatus | undefined,
+): string | null {
+  if (!status) return null;
+  if (status.authStatus === "unauthenticated") {
+    return status.message ?? "Provider authentication is required before starting a turn.";
+  }
+  if (!status.available) {
+    return status.message ?? "Provider is unavailable.";
+  }
+  return null;
+}
+
 export interface ProviderCommandReactorLiveOptions {
   readonly commandEventTimeout?: Duration.Duration;
 }
@@ -490,6 +505,7 @@ const make = Effect.gen(function* () {
   const gatewayOperations = yield* AgentGatewayOperationRepository;
   const textGeneration = yield* TextGeneration;
   const serverSettings = yield* ServerSettingsService;
+  const providerHealth = yield* Effect.serviceOption(ProviderHealth);
 
   const waitForGatewayOperationCompletion = Effect.fnUntraced(function* (operationId: string) {
     const completed = yield* Effect.gen(function* () {
@@ -1110,6 +1126,18 @@ const make = Effect.gen(function* () {
     const settingsSnapshot = yield* serverSettings.getSnapshot;
     const requestedModelSelection = options?.modelSelection;
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
+    if (Option.isSome(providerHealth)) {
+      const statuses = yield* providerHealth.value.getStatuses;
+      const status = statuses.find((entry) => entry.provider === desiredModelSelection.provider);
+      const unavailableReason = providerSelectionUnavailable(status);
+      if (unavailableReason !== null) {
+        return yield* new ProviderAdapterValidationError({
+          provider: desiredModelSelection.provider,
+          operation: "thread.turn.start",
+          issue: unavailableReason,
+        });
+      }
+    }
     const threadProvider: ProviderKind = currentProvider ?? desiredModelSelection.provider;
     const preferredProvider: ProviderKind =
       requestedModelSelection?.provider ?? currentProvider ?? threadProvider;

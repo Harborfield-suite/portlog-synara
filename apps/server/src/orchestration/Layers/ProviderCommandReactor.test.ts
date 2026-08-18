@@ -78,6 +78,7 @@ import {
   classifyProviderAttemptOutcome,
   isSafeLegacyProviderBlocker,
   makeProviderCommandReactorLive,
+  providerSelectionUnavailable,
 } from "./ProviderCommandReactor.ts";
 import {
   OrchestrationEngineService,
@@ -105,6 +106,42 @@ const asApprovalRequestId = (value: string): ApprovalRequestId =>
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
+
+describe("provider selection admission", () => {
+  it("fails closed for unavailable or unauthenticated providers", () => {
+    expect(
+      providerSelectionUnavailable({
+        provider: "codex",
+        status: "error",
+        available: true,
+        authStatus: "unauthenticated",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+        message: "Sign in to Codex.",
+      }),
+    ).toBe("Sign in to Codex.");
+    expect(
+      providerSelectionUnavailable({
+        provider: "cursor",
+        status: "error",
+        available: false,
+        authStatus: "unknown",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toBe("Provider is unavailable.");
+  });
+
+  it("allows a healthy provider", () => {
+    expect(
+      providerSelectionUnavailable({
+        provider: "codex",
+        status: "ready",
+        available: true,
+        authStatus: "authenticated",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("legacy provider blocker recovery", () => {
   it("keeps process lifecycle failures uncertain", () => {
