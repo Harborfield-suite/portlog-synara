@@ -157,6 +157,23 @@ beforeEach(() => {
 });
 
 describe("useProviderModelCatalog", () => {
+  it("prefetches curated BYOK models for the model-first picker", () => {
+    const [catalog] = readCatalogRenders({
+      selectedProvider: "codex",
+      discoveryEnabled: true,
+      modelHintByProvider: { codex: "gpt-5.5" },
+    });
+
+    expect(catalog?.modelOptionsByProvider.openaiCompatible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "anthropic/claude-sonnet-4",
+          upstreamProviderName: "OpenRouter",
+        }),
+      ]),
+    );
+  });
+
   it("uses the selected curated BYOK provider models in the openaiCompatible picker", () => {
     const [catalog] = readCatalogRenders({
       selectedProvider: "openaiCompatible",

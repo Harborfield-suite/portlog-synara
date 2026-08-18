@@ -75,24 +75,6 @@ export function useProviderModelCatalog(input: {
   const discoveryCwd = input.cwd ?? null;
   const { settings, serverSettings } = useAppSettings();
   const customModelsByProvider = useMemo(() => getCustomModelsByProvider(settings), [settings]);
-  const byokCatalogQuery = useQuery({
-    ...serverByokCatalogGroupsQueryOptions(),
-    enabled: selectedProvider === "openaiCompatible",
-  });
-  const selectedByokModels = useMemo(() => {
-    if (selectedProvider !== "openaiCompatible") return [];
-    const selectedGroup = byokCatalogQuery.data?.groups.find(
-      (group) => group.id === settings.openaiCompatibleCatalogProviderId,
-    );
-    return (
-      selectedGroup?.models.map((model) => ({
-        slug: model.id,
-        name: model.name,
-        upstreamProviderId: selectedGroup.id,
-        upstreamProviderName: selectedGroup.name,
-      })) ?? []
-    );
-  }, [byokCatalogQuery.data?.groups, selectedProvider, settings.openaiCompatibleCatalogProviderId]);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
     [settings.hiddenProviders],
@@ -133,6 +115,24 @@ export function useProviderModelCatalog(input: {
   const kiloModelDiscoveryEnabled = shouldDiscoverProvider("kilo");
   const openCodeModelDiscoveryEnabled = shouldDiscoverProvider("opencode");
   const piModelDiscoveryEnabled = shouldDiscoverProvider("pi");
+  const byokCatalogDiscoveryEnabled = shouldDiscoverProvider("openaiCompatible");
+  const byokCatalogQuery = useQuery({
+    ...serverByokCatalogGroupsQueryOptions(),
+    enabled: byokCatalogDiscoveryEnabled,
+  });
+  const selectedByokModels = useMemo(() => {
+    const selectedGroup = byokCatalogQuery.data?.groups.find(
+      (group) => group.id === settings.openaiCompatibleCatalogProviderId,
+    );
+    return (
+      selectedGroup?.models.map((model) => ({
+        slug: model.id,
+        name: model.name,
+        upstreamProviderId: selectedGroup.id,
+        upstreamProviderName: selectedGroup.name,
+      })) ?? []
+    );
+  }, [byokCatalogQuery.data?.groups, settings.openaiCompatibleCatalogProviderId]);
 
   const claudeDynamicModelsQuery = useQuery(
     providerModelsQueryOptions({
@@ -391,13 +391,14 @@ export function useProviderModelCatalog(input: {
       kilo: kiloModelDiscoveryPending,
       opencode: openCodeModelDiscoveryPending,
       pi: piModelDiscoveryPending,
-      openaiCompatible: selectedProvider === "openaiCompatible" && byokCatalogQuery.isLoading,
+      openaiCompatible: byokCatalogDiscoveryEnabled && byokCatalogQuery.isLoading,
     }),
     [
       antigravityModelDiscoveryPending,
       cursorModelDiscoveryPending,
       droidModelDiscoveryPending,
       kiloModelDiscoveryPending,
+      byokCatalogDiscoveryEnabled,
       byokCatalogQuery.isLoading,
       openCodeModelDiscoveryPending,
       piModelDiscoveryPending,

@@ -206,6 +206,21 @@ export function resolveProviderPickerLabel(
   return PROVIDER_DISPLAY_NAMES[provider];
 }
 
+function buildModelMetadata(
+  option: ProviderModelOption,
+  providerLabel: string,
+  availabilityLabel: string | null,
+): string {
+  const upstreamProvider = option.upstreamProviderName ?? option.upstreamProviderId;
+  return [
+    availabilityLabel,
+    upstreamProvider === providerLabel ? undefined : upstreamProvider,
+    option.description,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" · ");
+}
+
 function buildModelSearchText(option: ProviderModelOption): string {
   return [
     option.name,
@@ -516,15 +531,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
                     </span>
                   </span>
                   <span className="model-picker-frame-model-metadata">
-                    {[
-                      availability.label,
-                      option.upstreamProviderName ?? option.upstreamProviderId,
-                      option.description,
-                    ]
-                      .filter(
-                        (value): value is string => typeof value === "string" && value.trim().length > 0,
-                      )
-                      .join(" · ")}
+                    {buildModelMetadata(option, providerLabel, availability.label)}
                   </span>
                 </MenuRadioItem>
               );
@@ -820,7 +827,7 @@ export function ProviderModelViewer(
                       if (resolved) props.onProviderModelChange(provider, resolved);
                     }}>
                       <span className="model-picker-frame-model-primary"><ModelBrandIcon option={option} provider={provider} aria-hidden="true" className="model-picker-frame-model-icon" /><span className="min-w-0"><span className="model-picker-frame-model-name">{option.name}</span><span className="model-picker-frame-model-provider">{resolveProviderPickerLabel(provider, props.modelOptionsByProvider[provider])}</span></span></span>
-                      <span className="model-picker-frame-model-metadata">{[availability.label, option.upstreamProviderName ?? option.upstreamProviderId, option.description].filter((value) => typeof value === "string" && value.trim().length > 0).join(" · ")}</span>
+                      <span className="model-picker-frame-model-metadata">{buildModelMetadata(option, resolveProviderPickerLabel(provider, props.modelOptionsByProvider[provider]), availability.label)}</span>
                     </button>
                   );
                 })}
