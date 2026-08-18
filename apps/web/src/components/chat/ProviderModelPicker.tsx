@@ -10,6 +10,7 @@ import {
   type ServerProviderStatus,
 } from "@synara/contracts";
 import { resolveSelectableModel } from "@synara/shared/model";
+import { providerSupportsOAuthSetup } from "@synara/shared/providerMetadata";
 import * as Schema from "effect/Schema";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../session-logic";
@@ -75,7 +76,12 @@ function resolveLiveProviderAvailability(provider: ServerProviderStatus | undefi
   if (!provider.available) {
     return {
       disabled: true,
-      label: provider.authStatus === "unauthenticated" ? "Sign in" : "Unavailable",
+      label:
+        provider.authStatus === "unauthenticated"
+          ? "Sign in"
+          : providerSupportsOAuthSetup(provider.provider)
+            ? "Set up"
+            : "Unavailable",
     };
   }
 
@@ -180,6 +186,24 @@ function decodeProviderModelSelection(value: string): { provider: ProviderKind; 
     // Ignore malformed menu values; they cannot come from this picker.
   }
   return null;
+}
+
+export function resolveProviderPickerLabel(
+  provider: ProviderKind,
+  options: ReadonlyArray<ProviderModelOption>,
+): string {
+  if (provider === "openaiCompatible") {
+    const upstreamNames = Array.from(
+      new Set(
+        options
+          .map((option) => option.upstreamProviderName?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    );
+    const onlyUpstreamName = upstreamNames[0];
+    if (onlyUpstreamName) return onlyUpstreamName;
+  }
+  return PROVIDER_DISPLAY_NAMES[provider];
 }
 
 function buildModelSearchText(option: ProviderModelOption): string {
@@ -468,7 +492,10 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
         >
           <div className="model-picker-frame-table-body">
             {filteredOptions.map(({ provider, option, availability }) => {
-              const providerLabel = PROVIDER_DISPLAY_NAMES[provider];
+              const providerLabel = resolveProviderPickerLabel(
+                provider,
+                props.modelOptionsByProvider[provider],
+              );
               return (
                 <MenuRadioItem
                   key={provider + ":" + option.slug}
@@ -528,6 +555,10 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
             {modelFirstProviders.map(({ provider, availability }) => {
               const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[provider];
               const modelCount = modelCountByProvider.get(provider) ?? 0;
+              const providerLabel = resolveProviderPickerLabel(
+                provider,
+                props.modelOptionsByProvider[provider],
+              );
               return (
                 <button
                   key={provider}
@@ -544,7 +575,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
                       aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined}
                     />
                     <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
-                    <span className="truncate">{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                    <span className="truncate">{providerLabel}</span>
                   </span>
                   <span className="model-picker-frame-provider-count">{modelCount}</span>
                   {availability.disabled ? (
@@ -555,6 +586,10 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
             })}
             {visibleUnavailableProviderOptions.map((option) => {
               const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
+              const providerLabel = resolveProviderPickerLabel(
+                option.value,
+                props.modelOptionsByProvider[option.value],
+              );
               return (
                 <div
                   key={option.value}
@@ -567,7 +602,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
                       aria-label="Unavailable"
                     />
                     <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
-                    <span className="truncate">{PROVIDER_DISPLAY_NAMES[option.value]}</span>
+                    <span className="truncate">{providerLabel}</span>
                   </span>
                   <span className="model-picker-frame-provider-count">0</span>
                   <span className="model-picker-frame-provider-status">Unavailable</span>
@@ -620,6 +655,10 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
     <>
       {visibleAvailableProviderOptions.map((option) => {
         const OptionIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
+        const providerLabel = resolveProviderPickerLabel(
+          option.value,
+          props.modelOptionsByProvider[option.value],
+        );
         const liveProvider = props.providers?.find((entry) => entry.provider === option.value);
         const availability = resolveLiveProviderAvailability(liveProvider);
         if (availability.disabled) {
@@ -632,7 +671,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
                   providerIconClassName(option.value, "text-muted-foreground/85"),
                 )}
               />
-              <span>{option.label}</span>
+              <span>{providerLabel}</span>
               <span className="ms-auto text-[11px] text-muted-foreground/80">
                 {availability.label}
               </span>
@@ -649,7 +688,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
                   providerIconClassName(option.value, "text-muted-foreground/85"),
                 )}
               />
-              {option.label}
+              {providerLabel}
             </MenuSubTrigger>
             <ComposerPickerMenuSubPopup
               fixedWidth
@@ -663,13 +702,17 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
       {visibleUnavailableProviderOptions.length > 0 && <MenuSeparator />}
       {visibleUnavailableProviderOptions.map((option) => {
         const OptionIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
+        const providerLabel = resolveProviderPickerLabel(
+          option.value,
+          props.modelOptionsByProvider[option.value],
+        );
         return (
           <MenuItem key={option.value} disabled>
             <OptionIcon
               aria-hidden="true"
               className="size-3 shrink-0 text-muted-foreground/85 opacity-80"
             />
-            <span>{option.label}</span>
+            <span>{providerLabel}</span>
             <span className="ms-auto text-[11px] text-muted-foreground/80">Coming soon</span>
           </MenuItem>
         );
@@ -743,9 +786,13 @@ export function ProviderModelViewer(
             {providerEntries.map(({ option, availability }) => {
               const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
               const count = props.modelOptionsByProvider[option.value]?.length ?? 0;
+              const providerLabel = resolveProviderPickerLabel(
+                option.value,
+                props.modelOptionsByProvider[option.value],
+              );
               return (
                 <button key={option.value} type="button" className="model-picker-frame-provider-button" data-active={providerFilter === option.value ? "" : undefined} aria-pressed={providerFilter === option.value} onClick={() => setProviderFilter(option.value)}>
-                  <span className="model-picker-frame-provider-label"><span className="model-picker-frame-status-dot" data-live={availability.disabled ? undefined : ""} aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined} /><ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" /><span className="truncate">{PROVIDER_DISPLAY_NAMES[option.value]}</span></span>
+                  <span className="model-picker-frame-provider-label"><span className="model-picker-frame-status-dot" data-live={availability.disabled ? undefined : ""} aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined} /><ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" /><span className="truncate">{providerLabel}</span></span>
                   <span className="model-picker-frame-provider-count">{count}</span>
                   {availability.disabled ? <span className="model-picker-frame-provider-status">{availability.label}</span> : null}
                 </button>
@@ -772,7 +819,7 @@ export function ProviderModelViewer(
                       const resolved = resolveSelectableModel(provider, option.slug, props.modelOptionsByProvider[provider] ?? []);
                       if (resolved) props.onProviderModelChange(provider, resolved);
                     }}>
-                      <span className="model-picker-frame-model-primary"><ModelBrandIcon option={option} provider={provider} aria-hidden="true" className="model-picker-frame-model-icon" /><span className="min-w-0"><span className="model-picker-frame-model-name">{option.name}</span><span className="model-picker-frame-model-provider">{PROVIDER_DISPLAY_NAMES[provider]}</span></span></span>
+                      <span className="model-picker-frame-model-primary"><ModelBrandIcon option={option} provider={provider} aria-hidden="true" className="model-picker-frame-model-icon" /><span className="min-w-0"><span className="model-picker-frame-model-name">{option.name}</span><span className="model-picker-frame-model-provider">{resolveProviderPickerLabel(provider, props.modelOptionsByProvider[provider])}</span></span></span>
                       <span className="model-picker-frame-model-metadata">{[availability.label, option.upstreamProviderName ?? option.upstreamProviderId, option.description].filter((value) => typeof value === "string" && value.trim().length > 0).join(" · ")}</span>
                     </button>
                   );

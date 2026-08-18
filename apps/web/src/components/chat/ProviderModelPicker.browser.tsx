@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { ProviderModelPicker } from "./ProviderModelPicker";
+import { ProviderModelPicker, resolveProviderPickerLabel } from "./ProviderModelPicker";
 import type { ProviderModelOption } from "../../providerModelOptions";
 import { FAVORITE_MODEL_STORAGE_KEYS } from "../../lib/modelFavorites";
 
@@ -645,6 +645,44 @@ describe("ProviderModelPicker", () => {
     } finally {
       await mounted.cleanup();
     }
+  });
+
+  it("labels unavailable OAuth providers as setup targets", async () => {
+    const mounted = await mountPicker({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      providers: [
+        {
+          provider: "codex",
+          status: "ready",
+          available: true,
+          authStatus: "authenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+        {
+          provider: "antigravity",
+          status: "error",
+          available: false,
+          authStatus: "unknown",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+      await expect.element(page.getByText("Set up")).toBeInTheDocument();
+      await expect.element(page.getByText("Unavailable")).not.toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("labels the BYOK picker with its selected curated provider", () => {
+    expect(
+      resolveProviderPickerLabel("openaiCompatible", MODEL_OPTIONS_BY_PROVIDER.openaiCompatible),
+    ).toBe("OpenRouter");
   });
 
   it("keeps unavailable model rows visible but disabled in model-first mode", async () => {
