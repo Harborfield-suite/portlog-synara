@@ -14,7 +14,7 @@ import {
 import { resolveSelectableModel } from "@synara/shared/model";
 import { providerSupportsOAuthSetup } from "@synara/shared/providerMetadata";
 import * as Schema from "effect/Schema";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { Fragment, useDeferredValue, useEffect, useRef, useState } from "react";
 import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../session-logic";
 import { formatProviderModelOptionName } from "../../providerModelOptions";
 import { compareProvidersByOrder } from "../../providerOrdering";
@@ -870,7 +870,11 @@ export function ProviderModelViewer(
       availability: entry.availability,
       iconProvider: "openaiCompatible" as const,
     })),
-  ];
+  ].sort(
+    (left, right) =>
+      Number(left.availability.disabled) - Number(right.availability.disabled) ||
+      left.label.localeCompare(right.label, undefined, { sensitivity: "base" }),
+  );
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[color-mix(in_oklab,var(--popover)_94%,black)]">
@@ -889,28 +893,34 @@ export function ProviderModelViewer(
               <span className="model-picker-frame-provider-label"><span className="model-picker-frame-status-dot" aria-hidden="true" />All models</span>
               <span className="model-picker-frame-provider-count">{allModelCount}</span>
             </button>
-            {railEntries.map(({ key, label, count, availability, iconProvider }) => {
+            {railEntries.map(({ key, label, count, availability, iconProvider }, index) => {
               const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[iconProvider];
+              const startsUnconfiguredGroup =
+                availability.disabled && !railEntries[index - 1]?.availability.disabled;
               return (
-                <button
-                  key={key}
-                  type="button"
-                  className="model-picker-frame-provider-button"
-                  data-active={providerFilter === key ? "" : undefined}
-                  aria-pressed={providerFilter === key}
-                  onClick={() => setProviderFilter(key)}
-                >
-                  <span className="model-picker-frame-provider-label">
-                    <span
-                      className="model-picker-frame-status-dot"
-                      data-live={availability.disabled ? undefined : ""}
-                      aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined}
-                    />
-                    <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
-                    <span className="truncate">{label}</span>
-                  </span>
-                  <span className="model-picker-frame-provider-count">{count}</span>
-                </button>
+                <Fragment key={key}>
+                  {startsUnconfiguredGroup ? (
+                    <div className="my-2 border-t border-white/10" aria-hidden="true" />
+                  ) : null}
+                  <button
+                    type="button"
+                    className="model-picker-frame-provider-button"
+                    data-active={providerFilter === key ? "" : undefined}
+                    aria-pressed={providerFilter === key}
+                    onClick={() => setProviderFilter(key)}
+                  >
+                    <span className="model-picker-frame-provider-label">
+                      <span
+                        className="model-picker-frame-status-dot"
+                        data-live={availability.disabled ? undefined : ""}
+                        aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined}
+                      />
+                      <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
+                      <span className="truncate">{label}</span>
+                    </span>
+                    <span className="model-picker-frame-provider-count">{count}</span>
+                  </button>
+                </Fragment>
               );
             })}
           </div>

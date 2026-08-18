@@ -10,6 +10,7 @@ import { render } from "vitest-browser-react";
 
 import {
   ProviderModelPicker,
+  AVAILABLE_PROVIDER_OPTIONS,
   ProviderModelViewer,
   resolveProviderPickerLabel,
 } from "./ProviderModelPicker";
@@ -683,6 +684,34 @@ describe("ProviderModelPicker", () => {
         expect(text).toContain("Claude");
         expect(text).toContain("Sign in");
       });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("puts configured providers before alphabetized unconfigured providers", async () => {
+    const mounted = await mountViewer({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      providers: AVAILABLE_PROVIDER_OPTIONS.map(({ value }) => {
+        const configured = value === "codex" || value === "cursor";
+        return {
+          provider: value,
+          status: configured ? ("ready" as const) : ("error" as const),
+          available: configured,
+          authStatus: configured ? ("authenticated" as const) : ("unauthenticated" as const),
+          checkedAt: "2026-01-01T00:00:00.000Z",
+        };
+      }),
+    });
+
+    try {
+      const providerLabels = Array.from(
+        document.querySelectorAll(".model-picker-frame-provider-button"),
+        (button) => button.textContent?.trim(),
+      );
+      expect(providerLabels.slice(1, 4)).toEqual(["Codex2", "Cursor2", "Antigravity1"]);
     } finally {
       await mounted.cleanup();
     }
