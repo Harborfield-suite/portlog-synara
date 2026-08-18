@@ -38,7 +38,7 @@ export type SecretChannelPayload = {
 export type SecretAuditRecord = {
   readonly scope: string;
   readonly channel: SecretInjectionChannel | null;
-  readonly outcome: "restored" | "injected" | "denied" | "replaced";
+  readonly outcome: "obfuscated" | "injected" | "denied" | "replaced";
 };
 
 export type SecretProtectionResult = {
@@ -100,7 +100,7 @@ export function protectSecrets(input: {
     audit.push({
       scope: candidate.scope,
       channel: null,
-      outcome: input.mode === "replace" ? "replaced" : "restored",
+      outcome: input.mode === "replace" ? "replaced" : "obfuscated",
     });
   }
   return { text, candidates, audit };
