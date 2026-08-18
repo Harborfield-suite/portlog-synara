@@ -1595,6 +1595,7 @@ const makeWsRpcHandlersLayer = () =>
                   Effect.gen(function* () {
                     const catalogued = byokCatalogProvider(entry.id);
                     const storedKey = yield* providerCredentials.getByokApiKey(entry.id);
+                    const lastProbe = yield* providerCredentials.getByokCredentialHealth(entry.id);
                     const envValue = envValueForProvider(entry.id);
                     const oauthStatus =
                       entry.id === "anthropic" || entry.id === "openai-codex"
@@ -1617,6 +1618,7 @@ const makeWsRpcHandlersLayer = () =>
                       envValue,
                       oauthConnected,
                       oauthAccountLabel: byokOauthAccountLabel(entry.id),
+                      ...(lastProbe === null ? { lastProbe: null } : { lastProbe: { kind: lastProbe } }),
                     });
                     return snapshot;
                   }),
@@ -1654,6 +1656,7 @@ const makeWsRpcHandlersLayer = () =>
               yield* providerCredentials.replaceByokApiKey(input.provider, input.apiKey);
               if (!input.apiKey?.trim()) {
                 clearByokProbe(input.provider);
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, null);
                 clearByokOauthConnected(input.provider);
                 return {
                   provider: input.provider,
@@ -1670,6 +1673,9 @@ const makeWsRpcHandlersLayer = () =>
                   apiKey: input.apiKey,
                 }),
               );
+              if (probe.kind === "ok" || probe.kind === "invalid-credential") {
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, probe.kind);
+              }
               // xAI OAuth tokens may fail the public models probe; still treat as connected.
               if (
                 (input.provider === "xai" || input.provider === "xai-oauth") &&
@@ -1718,12 +1724,15 @@ const makeWsRpcHandlersLayer = () =>
               const storedKey = yield* providerCredentials.getByokApiKey(input.provider);
               const envValue = envValueForProvider(input.provider);
               const apiKey = storedKey?.trim() || envValue;
-              yield* Effect.promise(() =>
+              const probe = yield* Effect.promise(() =>
                 probeAndRememberByokConnection({
                   providerId: input.provider,
                   apiKey,
                 }),
               );
+              if (probe.kind === "ok" || probe.kind === "invalid-credential") {
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, probe.kind);
+              }
               const catalogued = byokCatalogProvider(input.provider);
               const snapshot = buildByokProviderConnectionSnapshot({
                 providerId: input.provider,

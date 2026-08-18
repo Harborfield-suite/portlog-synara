@@ -91,6 +91,7 @@ export function buildByokProviderConnectionSnapshot(input: {
   readonly envValue: string | null;
   readonly oauthConnected?: boolean;
   readonly oauthAccountLabel?: string | null;
+  readonly lastProbe?: ProviderProbeResult | null;
 }): ByokProviderConnectionSnapshot {
   const credential = resolveProviderCredential({
     storedKey: input.storedKey,
@@ -102,7 +103,10 @@ export function buildByokProviderConnectionSnapshot(input: {
     modelCount: input.modelCount,
     storedKey: input.storedKey,
     envValue: input.envValue,
-    lastProbe: getRememberedByokProbe(input.providerId),
+    lastProbe:
+      input.lastProbe === undefined
+        ? getRememberedByokProbe(input.providerId)
+        : input.lastProbe,
     ...(input.oauthConnected === undefined ? {} : { oauthConnected: input.oauthConnected }),
     ...(input.oauthAccountLabel === undefined ? {} : { oauthAccountLabel: input.oauthAccountLabel }),
   });

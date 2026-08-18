@@ -21,6 +21,8 @@ describe("resolveProviderServerPassword", () => {
       getByokApiKey: () => Effect.succeed(null),
       replaceByokApiKey: () => Effect.void,
       isByokApiKeyConfigured: () => Effect.succeed(false),
+      getByokCredentialHealth: () => Effect.succeed(null),
+      replaceByokCredentialHealth: () => Effect.void,
       listConfiguredByokProviders: () => Effect.succeed([]),
       getOpenAICompatibleApiKey: () => Effect.succeed(null),
       replaceOpenAICompatibleApiKey: () => Effect.void,
@@ -58,6 +60,11 @@ describe("ProviderCredentials BYOK multi-provider keys", () => {
       expect(yield* credentials.getByokApiKey("groq")).toBe("gsk-groq");
       expect(yield* credentials.isByokApiKeyConfigured("openrouter")).toBe(true);
       expect(yield* credentials.isByokApiKeyConfigured("anthropic")).toBe(false);
+      expect(yield* credentials.getByokCredentialHealth("openrouter")).toBeNull();
+      yield* credentials.replaceByokCredentialHealth("openrouter", "ok");
+      expect(yield* credentials.getByokCredentialHealth("openrouter")).toBe("ok");
+      yield* credentials.replaceByokCredentialHealth("openrouter", null);
+      expect(yield* credentials.getByokCredentialHealth("openrouter")).toBeNull();
 
       const configured = yield* credentials.listConfiguredByokProviders();
       expect(configured.toSorted()).toEqual(["groq", "openrouter"]);

@@ -16,7 +16,10 @@ const secretName = (provider: ExternalProviderServer): string =>
 const LEGACY_OPENAI_COMPATIBLE_API_KEY_SECRET = "provider-openai-compatible-api-key";
 const BYOK_API_KEY_PREFIX = "provider-byok-api-key:";
 const BYOK_API_KEY_INDEX_SECRET = "provider-byok-api-key-index";
+const BYOK_HEALTH_PREFIX = "provider-byok-health:";
 const LEGACY_BYOK_PROVIDER_ID = "openrouter";
+
+export type ByokCredentialHealth = "ok" | "invalid-credential";
 
 function normalizeByokProviderId(providerId: string): string {
   return providerId.trim().toLowerCase();
@@ -52,6 +55,13 @@ export interface ProviderCredentialsShape {
   readonly isByokApiKeyConfigured: (
     providerId: string,
   ) => Effect.Effect<boolean, SecretStoreError>;
+  readonly getByokCredentialHealth: (
+    providerId: string,
+  ) => Effect.Effect<ByokCredentialHealth | null, SecretStoreError>;
+  readonly replaceByokCredentialHealth: (
+    providerId: string,
+    health: ByokCredentialHealth | null,
+  ) => Effect.Effect<void, SecretStoreError>;
   readonly listConfiguredByokProviders: () => Effect.Effect<
     ReadonlyArray<string>,
     SecretStoreError
@@ -178,6 +188,25 @@ const makeProviderCredentials = Effect.gen(function* () {
   const isByokApiKeyConfigured: ProviderCredentialsShape["isByokApiKeyConfigured"] = (providerId) =>
     getByokApiKey(providerId).pipe(Effect.map((apiKey) => apiKey !== null));
 
+  const getByokCredentialHealth: ProviderCredentialsShape["getByokCredentialHealth"] = (providerId) =>
+    Effect.gen(function* () {
+      const normalized = normalizeByokProviderId(providerId);
+      if (!isValidByokProviderId(normalized)) return null;
+      const value = yield* secrets.get(`${BYOK_HEALTH_PREFIX}${normalized}`).pipe(Effect.map(decodeSecret));
+      return value === "ok" || value === "invalid-credential" ? value : null;
+    });
+
+  const replaceByokCredentialHealth: ProviderCredentialsShape["replaceByokCredentialHealth"] = (
+    providerId,
+    health,
+  ) => {
+    const normalized = normalizeByokProviderId(providerId);
+    if (!isValidByokProviderId(normalized)) return Effect.void;
+    return health === null
+      ? secrets.remove(`${BYOK_HEALTH_PREFIX}${normalized}`)
+      : secrets.set(`${BYOK_HEALTH_PREFIX}${normalized}`, encoder.encode(health));
+  };
+
   const listConfiguredByokProviders: ProviderCredentialsShape["listConfiguredByokProviders"] = () =>
     Effect.gen(function* () {
       const indexed = yield* readIndex();
@@ -206,6 +235,8 @@ const makeProviderCredentials = Effect.gen(function* () {
     getByokApiKey,
     replaceByokApiKey,
     isByokApiKeyConfigured,
+    getByokCredentialHealth,
+    replaceByokCredentialHealth,
     listConfiguredByokProviders,
     getOpenAICompatibleApiKey,
     replaceOpenAICompatibleApiKey,
