@@ -168,6 +168,10 @@ import {
   ServerListByokModelsInput,
   ServerListByokModelsResult,
   ServerListByokProvidersResult,
+  ServerStartByokOAuthInput,
+  ServerStartByokOAuthResult,
+  ServerLogoutByokOAuthInput,
+  ServerLogoutByokOAuthResult,
   ServerSetByokApiKeyInput,
   ServerSetByokApiKeyResult,
   ServerTestByokConnectionInput,
@@ -754,6 +758,18 @@ export const WsServerListByokModelsRpc = Rpc.make(WS_METHODS.serverListByokModel
   error: WsRpcError,
 });
 
+export const WsServerStartByokOAuthRpc = Rpc.make(WS_METHODS.serverStartByokOAuth, {
+  payload: ServerStartByokOAuthInput,
+  success: ServerStartByokOAuthResult,
+  error: WsRpcError,
+});
+
+export const WsServerLogoutByokOAuthRpc = Rpc.make(WS_METHODS.serverLogoutByokOAuth, {
+  payload: ServerLogoutByokOAuthInput,
+  success: ServerLogoutByokOAuthResult,
+  error: WsRpcError,
+});
+
 export const WsServerSetByokApiKeyRpc = Rpc.make(WS_METHODS.serverSetByokApiKey, {
   payload: ServerSetByokApiKeyInput,
   success: ServerSetByokApiKeyResult,
@@ -1135,6 +1151,8 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsServerListByokProvidersRpc,
   WsServerListByokCatalogGroupsRpc,
   WsServerListByokModelsRpc,
+  WsServerStartByokOAuthRpc,
+  WsServerLogoutByokOAuthRpc,
   WsServerSetByokApiKeyRpc,
   WsServerTestByokConnectionRpc,
   WsServerRefreshProvidersRpc,

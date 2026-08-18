@@ -38,6 +38,7 @@ import { authErrorResponse, makeEffectAuthRequest } from "./auth/effectHttp";
 import { byokProviderModels, byokCatalogProvider, loadByokCatalog } from "./byok/byokCatalog.ts";
 import { listByokCatalogGroups } from "./byok/byokCatalogGroups.ts";
 import { listByokModelsForProvider } from "./byok/listByokModels.ts";
+import { launchByokOAuth } from "./byok/byokOAuth.ts";
 import {
   isByokOauthConnected,
   markByokOauthConnected,
@@ -1636,6 +1637,24 @@ const makeWsRpcHandlersLayer = () =>
               metadata: loadByokCatalog().metadata,
             })),
             "Failed to list BYOK catalog groups",
+          ),
+        [WS_METHODS.serverStartByokOAuth]: (input) =>
+          rpcEffect(
+            Effect.promise(async () => {
+              const command = await launchByokOAuth(input.provider, "login");
+              return { provider: input.provider, ...command, args: [...command.args] };
+            }),
+            "Failed to start BYOK OAuth login",
+          ),
+        [WS_METHODS.serverLogoutByokOAuth]: (input) =>
+          rpcEffect(
+            Effect.promise(async () => {
+              const command = await launchByokOAuth(input.provider, "logout");
+              clearByokOauthConnected(input.provider);
+              clearByokProbe(input.provider);
+              return { provider: input.provider, ...command, args: [...command.args] };
+            }),
+            "Failed to log out of BYOK OAuth",
           ),
         [WS_METHODS.serverListByokModels]: (input) =>
           rpcEffect(

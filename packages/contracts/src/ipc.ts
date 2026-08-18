@@ -145,6 +145,10 @@ import type {
   ServerListByokModelsInput,
   ServerListByokModelsResult,
   ServerListByokProvidersResult,
+  ServerStartByokOAuthInput,
+  ServerStartByokOAuthResult,
+  ServerLogoutByokOAuthInput,
+  ServerLogoutByokOAuthResult,
   ServerSetByokApiKeyInput,
   ServerSetByokApiKeyResult,
   ServerTestByokConnectionInput,
@@ -710,6 +714,8 @@ export interface NativeApi {
     ) => Promise<ExternalMcpCreateIntegrationResult>;
     refreshProviders: () => Promise<ServerRefreshProvidersResult>;
     listByokProviders: () => Promise<ServerListByokProvidersResult>;
+    startByokOAuth: (input: ServerStartByokOAuthInput) => Promise<ServerStartByokOAuthResult>;
+    logoutByokOAuth: (input: ServerLogoutByokOAuthInput) => Promise<ServerLogoutByokOAuthResult>;
     listByokCatalogGroups: (
       input: ServerListByokCatalogGroupsInput,
     ) => Promise<ServerListByokCatalogGroupsResult>;

@@ -671,6 +671,8 @@ export function createWsNativeApi(): NativeApi {
         transport.request(WS_METHODS.serverRefreshExternalMcpPairing, input),
       refreshProviders: () => transport.request(WS_METHODS.serverRefreshProviders),
       listByokProviders: () => transport.request(WS_METHODS.serverListByokProviders),
+      startByokOAuth: (input) => transport.request(WS_METHODS.serverStartByokOAuth, input),
+      logoutByokOAuth: (input) => transport.request(WS_METHODS.serverLogoutByokOAuth, input),
       listByokCatalogGroups: (input) =>
         transport.request(WS_METHODS.serverListByokCatalogGroups, input),
       listByokModels: (input) => transport.request(WS_METHODS.serverListByokModels, input),

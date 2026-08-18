@@ -44,6 +44,10 @@ export function byokCatalogSearchQuery(query: string): string {
   return query.trim();
 }
 
+function isByokOAuthProvider(providerId: string): providerId is "openai-codex" | "cursor" {
+  return providerId === "openai-codex" || providerId === "cursor";
+}
+
 export function byokCatalogModelSelection(input: {
   providerId: string;
   model: Pick<ServerByokCatalogGroupModel, "id" | "qualifiedId">;
@@ -80,7 +84,9 @@ export function ByokModelCatalogPanel(props: {
   const [setupProviderId, setSetupProviderId] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"save" | "test" | "remove" | null>(null);
+  const [busyAction, setBusyAction] = useState<
+    "save" | "test" | "remove" | "oauth-login" | "oauth-logout" | null
+  >(null);
   const searchQuery = byokCatalogSearchQuery(searchInput);
   const providersQuery = useQuery(serverByokProvidersQueryOptions());
   const catalogQuery = useQuery(serverByokCatalogGroupsQueryOptions(searchQuery));
@@ -92,6 +98,26 @@ export function ByokModelCatalogPanel(props: {
 
   const refreshProviderData = async () => {
     await Promise.all([providersQuery.refetch(), catalogQuery.refetch()]);
+  };
+
+  const runOAuthAction = async (
+    action: "login" | "logout",
+    providerId: "openai-codex" | "cursor",
+  ) => {
+    if (busyAction) return;
+    setBusyAction(action === "login" ? "oauth-login" : "oauth-logout");
+    setActionError(null);
+    try {
+      const api = ensureNativeApi();
+      if (action === "login") await api.server.startByokOAuth({ provider: providerId });
+      else await api.server.logoutByokOAuth({ provider: providerId });
+      await api.server.refreshProviders();
+      await refreshProviderData();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "OAuth update failed.");
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const runCredentialAction = async (
@@ -162,6 +188,7 @@ export function ByokModelCatalogPanel(props: {
                 ) : (
                   groups.map((group: ServerByokCatalogGroup) => {
                     const provider = providerById.get(group.id);
+                    const oauthProvider = isByokOAuthProvider(group.id) ? group.id : null;
                     const canSelectModels = provider ? isByokProviderUsable(provider) : false;
                     return (
                       <section key={group.id} aria-label={group.name}>
@@ -236,6 +263,26 @@ export function ByokModelCatalogPanel(props: {
                               >
                                 {busyAction === "remove" ? "Removing…" : "Remove key"}
                               </button>
+                              {provider?.supportedAuth?.includes("oauth") && oauthProvider ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={busyAction !== null}
+                                    className="rounded border border-border px-2 py-1 text-[11px] text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                    onClick={() => void runOAuthAction("login", oauthProvider)}
+                                  >
+                                    {busyAction === "oauth-login" ? "Opening login…" : "Log in with OAuth"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busyAction !== null || provider.auth !== "oauth"}
+                                    className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                    onClick={() => void runOAuthAction("logout", oauthProvider)}
+                                  >
+                                    {busyAction === "oauth-logout" ? "Logging out…" : "Log out"}
+                                  </button>
+                                </>
+                              ) : null}
                             </div>
                           </div>
                         ) : null}

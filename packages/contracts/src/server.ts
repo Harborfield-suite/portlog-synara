@@ -560,6 +560,27 @@ export const ServerListByokProvidersResult = Schema.Struct({
 });
 export type ServerListByokProvidersResult = typeof ServerListByokProvidersResult.Type;
 
+export const ServerByokOAuthProvider = Schema.Literals(["openai-codex", "cursor"]);
+export type ServerByokOAuthProvider = typeof ServerByokOAuthProvider.Type;
+
+export const ServerStartByokOAuthInput = Schema.Struct({
+  provider: ServerByokOAuthProvider,
+});
+export type ServerStartByokOAuthInput = typeof ServerStartByokOAuthInput.Type;
+
+export const ServerStartByokOAuthResult = Schema.Struct({
+  provider: ServerByokOAuthProvider,
+  executable: TrimmedNonEmptyString,
+  args: Schema.Array(Schema.String),
+});
+export type ServerStartByokOAuthResult = typeof ServerStartByokOAuthResult.Type;
+
+export const ServerLogoutByokOAuthInput = ServerStartByokOAuthInput;
+export type ServerLogoutByokOAuthInput = typeof ServerLogoutByokOAuthInput.Type;
+
+export const ServerLogoutByokOAuthResult = ServerStartByokOAuthResult;
+export type ServerLogoutByokOAuthResult = typeof ServerLogoutByokOAuthResult.Type;
+
 export const ServerListByokModelsInput = Schema.Struct({
   provider: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
 });
