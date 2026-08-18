@@ -192,6 +192,8 @@ export function parseSecretsFile(contents: string): Readonly<Record<string, stri
   return parsed;
 }
 
+const SECRET_NAME_PATTERN = /(?:token|secret|key|password|credential|auth|private|cookie)/iu;
+
 export function collectSecretCandidates(input: {
   readonly environment: Readonly<Record<string, string | undefined>>;
   readonly secretsFile: Readonly<Record<string, string>>;
@@ -199,7 +201,7 @@ export function collectSecretCandidates(input: {
 }): ReadonlyArray<SecretCandidate> {
   return [
     ...Object.entries(input.environment).flatMap(([name, value]) =>
-      value
+      SECRET_NAME_PATTERN.test(name) && value
         ? [{ name, scope: `environment:${name}`, value, source: "environment" as const }]
         : [],
     ),

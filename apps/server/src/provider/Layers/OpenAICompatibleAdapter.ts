@@ -20,14 +20,25 @@ import {
 } from "@synara/contracts";
 import { Effect, Layer, Queue, Stream } from "effect";
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { ServerConfig } from "../../config";
 import { ProviderCredentials } from "../../providerCredentials";
+import { ServerSecretStore } from "../../auth/Services/ServerSecretStore";
 import { ServerSettingsService } from "../../serverSettings";
 import { byokCatalogProvider } from "../../byok/byokCatalog.ts";
 import {
   envValueForProvider,
 } from "../../byok/byokConnectionRegistry.ts";
 import { resolveProviderCredential } from "../../byok/providerConnection.ts";
+import {
+  collectSecretCandidates,
+  parseSecretsFile,
+  protectSecrets,
+  type SecretProtectionMode,
+} from "../../secrets/secretProtection.ts";
+import { loadSecretProtectionKey } from "../../secrets/secretProtectionKey.ts";
 import { ProviderAdapterRequestError } from "../Errors.ts";
 import { PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY } from "../Services/ProviderAdapter.ts";
 import {
@@ -42,6 +53,12 @@ import {
 import { makeWorkspaceTools } from "../workspaceTools.ts";
 
 const PROVIDER = "openaiCompatible" as const;
+
+type SecretProtectionConfig = {
+  readonly mode: SecretProtectionMode;
+  readonly key: Uint8Array;
+  readonly candidates: ReadonlyArray<import("../../secrets/secretProtection.ts").SecretCandidate>;
+};
 
 type SessionContext = {
   readonly session: ProviderSession;
@@ -64,6 +81,7 @@ function makeEventBase(context: SessionContext, turnId?: TurnId) {
 const makeOpenAICompatibleAdapter = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const credentials = yield* ProviderCredentials;
+  const secretStore = yield* ServerSecretStore;
   const settingsService = yield* ServerSettingsService;
   const runtimeEventQueue = yield* Queue.bounded<ProviderRuntimeEvent>(
     PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY,
@@ -92,6 +110,47 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
   const resolveConfig = Effect.gen(function* () {
     const settings = yield* settingsService.getSettings.pipe(Effect.orDie);
     const providerSettings = settings.providers.openaiCompatible;
+    const secretFiles =
+      settings.secretProtectionMode === "off"
+        ? {}
+        : yield* Effect.promise(async () => {
+            const contents = await Promise.all(
+              [join(serverConfig.homeDir, "secrets.yml"), join(serverConfig.cwd, "secrets.yml")].map(
+                (filePath) => readFile(filePath, "utf8").catch(() => ""),
+              ),
+            );
+            return contents.map(parseSecretsFile).reduce<Record<string, string>>(
+              (merged, values) => Object.assign(merged, values),
+              {},
+            );
+          });
+    const configuredProviders =
+      settings.secretProtectionMode === "off"
+        ? []
+        : yield* credentials.listConfiguredByokProviders().pipe(Effect.orDie);
+    const storedCredentials =
+      settings.secretProtectionMode === "off"
+        ? []
+        : yield* Effect.forEach(configuredProviders, (provider) =>
+            credentials.getByokApiKey(provider).pipe(
+              Effect.map((value) => (value ? { provider, value } : null)),
+              Effect.catch(() => Effect.succeed(null)),
+            ),
+          );
+    const secretProtection: SecretProtectionConfig | null =
+      settings.secretProtectionMode === "off"
+        ? null
+        : {
+            mode: settings.secretProtectionMode,
+            ...(yield* loadSecretProtectionKey(secretStore).pipe(Effect.orDie)),
+            candidates: collectSecretCandidates({
+              environment: process.env,
+              secretsFile: secretFiles,
+              credentials: storedCredentials.filter(
+                (entry): entry is { readonly provider: string; readonly value: string } => entry !== null,
+              ),
+            }),
+          };
     const catalogProviderId = providerSettings.catalogProviderId.trim() || "openrouter";
     const storedKey = yield* credentials.getByokApiKey(catalogProviderId).pipe(Effect.orDie);
     const credential = resolveProviderCredential({
@@ -123,6 +182,7 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
       customModels: providerSettings.customModels,
       catalogProviderId,
       wire: catalogued?.wire ?? "openai",
+      secretProtection,
     };
   });
 
@@ -200,6 +260,26 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
         type: "item.started",
         payload: { itemType: "assistant_message", status: "inProgress", title: "Assistant" },
       } satisfies ProviderRuntimeEvent);
+
+      const messagesForModel = config.secretProtection
+        ? context.messages.map((message) => {
+            const protectedMessage = protectSecrets({
+              text: message.content,
+              mode: config.secretProtection!.mode,
+              key: config.secretProtection!.key,
+              candidates: config.secretProtection!.candidates,
+            });
+            if (protectedMessage.audit.length > 0) {
+              Effect.runFork(
+                Effect.logInfo("secret obfuscation applied", {
+                  count: protectedMessage.audit.length,
+                  outcomes: protectedMessage.audit.map((entry) => entry.outcome),
+                }),
+              );
+            }
+            return { ...message, content: protectedMessage.text };
+          })
+        : context.messages;
 
       const run = Effect.tryPromise({
         try: async () => {
@@ -286,7 +366,7 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
                       : "openrouter",
                   apiKey: config.apiKey,
                   model,
-                  messages: context.messages,
+                  messages: messagesForModel,
                   baseUrl: config.baseUrl,
                   tools: makeWorkspaceTools(context.session.cwd ?? serverConfig.cwd),
                   signal: abortController.signal,
@@ -303,7 +383,7 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
                   baseUrl: config.baseUrl,
                   apiKey: config.apiKey,
                   model,
-                  messages: context.messages,
+                  messages: messagesForModel,
                   signal: abortController.signal,
                 },
                 { onTextDelta },
