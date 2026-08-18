@@ -98,6 +98,8 @@ import {
 } from "~/lib/providerDiscoveryReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import {
+  serverByokCatalogGroupsQueryOptions,
+  serverByokProvidersQueryOptions,
   serverConfigQueryOptions,
   serverQueryKeys,
   serverSettingsQueryOptions,
@@ -2232,6 +2234,15 @@ export default function ChatView({
     cwd: providerModelDiscoveryCwd,
     modelHintByProvider: composerModelHintByProvider,
     agentDiscoveryPolicy: "eager-core",
+  });
+  const byokDiscoveryEnabled = isModelPickerOpen || presentationMode === "model";
+  const byokCatalogGroupsQuery = useQuery({
+    ...serverByokCatalogGroupsQueryOptions(),
+    enabled: byokDiscoveryEnabled,
+  });
+  const byokProvidersQuery = useQuery({
+    ...serverByokProvidersQueryOptions(),
+    enabled: byokDiscoveryEnabled,
   });
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadId,
@@ -6215,6 +6226,16 @@ export default function ChatView({
       setComposerDraftModelSelectionAndSticky,
       setComposerDraftProviderModelOptions,
     ],
+  );
+  const onByokProviderModelChange = useCallback(
+    async (providerId: string, model: ModelSlug) => {
+      updateSettings({
+        openaiCompatibleCatalogProviderId: providerId,
+        openaiCompatibleDefaultModel: model,
+      });
+      await onProviderModelSelect("openaiCompatible", model);
+    },
+    [onProviderModelSelect, updateSettings],
   );
 
   useEffect(() => {
@@ -10675,7 +10696,15 @@ export default function ChatView({
           loadingModelProviders={loadingModelProviders}
           hiddenProviders={settings.hiddenProviders}
           providerOrder={settings.providerOrder}
+          {...(byokCatalogGroupsQuery.data?.groups
+            ? { byokCatalogGroups: byokCatalogGroupsQuery.data.groups }
+            : {})}
+          {...(byokProvidersQuery.data?.providers
+            ? { byokProviders: byokProvidersQuery.data.providers }
+            : {})}
+          byokSelectedProviderId={settings.openaiCompatibleCatalogProviderId}
           onProviderModelChange={onProviderModelSelect}
+          onByokProviderModelChange={onByokProviderModelChange}
           onClose={closeModelViewer}
         />
       </div>

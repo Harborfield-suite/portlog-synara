@@ -1,9 +1,18 @@
-import { type ModelSlug, type ProviderKind, type ServerProviderStatus } from "@synara/contracts";
+import {
+  type ModelSlug,
+  type ProviderKind,
+  type ServerByokCatalogGroup,
+  type ServerProviderStatus,
+} from "@synara/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { ProviderModelPicker, resolveProviderPickerLabel } from "./ProviderModelPicker";
+import {
+  ProviderModelPicker,
+  ProviderModelViewer,
+  resolveProviderPickerLabel,
+} from "./ProviderModelPicker";
 import type { ProviderModelOption } from "../../providerModelOptions";
 import { FAVORITE_MODEL_STORAGE_KEYS } from "../../lib/modelFavorites";
 
@@ -153,7 +162,7 @@ const PI_FAVORITE_SORT_MODELS = [
   },
 ] satisfies ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>;
 
-async function mountPicker(props: {
+type PickerHarnessProps = {
   provider: ProviderKind;
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
@@ -165,7 +174,11 @@ async function mountPicker(props: {
     ProviderKind,
     ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>
   >;
-}) {
+  byokCatalogGroups?: ReadonlyArray<ServerByokCatalogGroup>;
+  byokSelectedProviderId?: string;
+};
+
+async function mountPicker(props: PickerHarnessProps) {
   const host = document.createElement("div");
   document.body.append(host);
   const onProviderModelChange = vi.fn();
@@ -188,6 +201,34 @@ async function mountPicker(props: {
 
   return {
     onProviderModelChange,
+    cleanup: async () => {
+      await screen.unmount();
+      host.remove();
+    },
+  };
+}
+
+async function mountViewer(props: PickerHarnessProps) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const screen = await render(
+    <ProviderModelViewer
+      provider={props.provider}
+      model={props.model}
+      lockedProvider={props.lockedProvider}
+      modelOptionsByProvider={props.modelOptionsByProvider ?? MODEL_OPTIONS_BY_PROVIDER}
+      {...(props.providers ? { providers: props.providers } : {})}
+      {...(props.byokCatalogGroups ? { byokCatalogGroups: props.byokCatalogGroups } : {})}
+      {...(props.byokSelectedProviderId
+        ? { byokSelectedProviderId: props.byokSelectedProviderId }
+        : {})}
+      onProviderModelChange={vi.fn()}
+      onClose={vi.fn()}
+    />,
+    { container: host },
+  );
+
+  return {
     cleanup: async () => {
       await screen.unmount();
       host.remove();
@@ -642,6 +683,70 @@ describe("ProviderModelPicker", () => {
         expect(text).toContain("Claude");
         expect(text).toContain("Sign in");
       });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("lists curated BYOK providers beside runtime providers", async () => {
+    const mounted = await mountViewer({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      byokCatalogGroups: [
+        {
+          id: "cerebras",
+          name: "Cerebras",
+          doc: "https://cerebras.ai",
+          models: [
+            {
+              id: "llama-4-scout",
+              name: "Llama 4 Scout",
+              qualifiedId: "cerebras/llama-4-scout",
+              context: 128000,
+              reasoning: false,
+              released: "2026-01-01",
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      await expect
+        .element(page.getByRole("button", { name: /Cerebras.*1/ }))
+        .toBeInTheDocument();
+      await page.getByRole("button", { name: /Cerebras.*1/ }).click();
+      await expect.element(page.getByRole("heading", { name: "Cerebras" })).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows provider detail and setup guidance in the model viewer", async () => {
+    const mounted = await mountViewer({
+      provider: "claudeAgent",
+      model: "claude-opus-4-6",
+      lockedProvider: null,
+      providers: [
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await expect.element(page.getByRole("heading", { name: "Claude" })).toBeInTheDocument();
+      await expect
+        .element(page.getByText("Claude has no credentials configured"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByRole("button", { name: "Open provider settings ↗" }))
+        .toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
