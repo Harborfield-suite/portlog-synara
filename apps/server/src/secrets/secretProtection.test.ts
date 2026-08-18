@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSecretChannelPayload,
   collectSecretCandidates,
+  createSecretAuditLog,
+  parseSecretsFile,
   protectSecrets,
   restoreSecret,
   type SecretCandidate,
@@ -16,6 +19,13 @@ const candidate: SecretCandidate = {
 };
 
 describe("secretProtection", () => {
+  it("keeps bounded audit records without secret payloads", () => {
+    const log = createSecretAuditLog(1);
+    log.append({ scope: "provider:one", channel: "environment", outcome: "injected" });
+    log.append({ scope: "provider:two", channel: null, outcome: "denied" });
+    expect(log.records()).toEqual([{ scope: "provider:two", channel: null, outcome: "denied" }]);
+  });
+
   it("is off by default and leaves raw text unchanged", () => {
     expect(protectSecrets({ text: candidate.value, mode: "off", key, candidates: [candidate] })).toEqual({
       text: candidate.value,
@@ -61,6 +71,34 @@ describe("secretProtection", () => {
     const result = protectSecrets({ text: candidate.value, mode: "replace", key, candidates: [candidate] });
     expect(result.text).toBe("[REDACTED_SECRET]");
     expect(result.text).not.toContain(candidate.value);
+  });
+
+  it("binds authorized secrets to safe channels and never command arguments", () => {
+    expect(
+      buildSecretChannelPayload({
+        value: candidate.value,
+        binding: { scope: candidate.scope, channel: "environment", target: "OPENAI_API_KEY" },
+      }),
+    ).toEqual({
+      environment: { OPENAI_API_KEY: candidate.value },
+      stdin: null,
+      file: null,
+      provider: null,
+      args: [],
+    });
+    expect(
+      buildSecretChannelPayload({
+        value: candidate.value,
+        binding: { scope: candidate.scope, channel: "stdin", target: "credential" },
+      }).args,
+    ).toEqual([]);
+  });
+
+  it("parses flat secrets.yml values without returning comments", () => {
+    expect(parseSecretsFile("TOKEN: file-secret\nquoted: \"quoted-secret\"\n# nope\n")).toEqual({
+      TOKEN: "file-secret",
+      quoted: "quoted-secret",
+    });
   });
 
   it("collects environment, secrets-file, and credential-store sources", () => {

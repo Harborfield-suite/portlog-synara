@@ -18,6 +18,8 @@ function context(input: {
   readonly capabilities?: ReadonlyArray<"thread:read" | "thread:write">;
   readonly active?: boolean;
   readonly onActiveCheck?: () => void;
+  readonly injectSecret?: ToolContext["injectSecret"];
+  readonly recordSecretAudit?: ToolContext["recordSecretAudit"];
 }): ToolContext {
   return {
     principal: {
@@ -39,6 +41,8 @@ function context(input: {
         : Effect.void;
     },
     jsonRpcRequestId: "request-test",
+    ...(input.injectSecret ? { injectSecret: input.injectSecret } : {}),
+    ...(input.recordSecretAudit ? { recordSecretAudit: input.recordSecretAudit } : {}),
   };
 }
 
@@ -129,6 +133,79 @@ describe("AgentGatewayToolRegistry", () => {
           },
         });
       }
+    }),
+  );
+
+  it.effect("requires an injected secret boundary for secret-capable tools", () =>
+    Effect.gen(function* () {
+      const registry = new AgentGatewayToolRegistry([
+        {
+          ...tool("secret_tool", () => Effect.succeed({ content: [{ type: "text", text: "no" }] })),
+          secretBinding: {
+            scope: "provider:openai",
+            channel: "environment" as const,
+            target: "OPENAI_API_KEY",
+          },
+        },
+      ]);
+
+      const result = yield* registry.dispatch("secret_tool", {}, context({}));
+      assert.equal(result.isError, true);
+      const firstContent = result.content[0];
+      assert.equal(firstContent?.type, "text");
+      if (firstContent?.type === "text") {
+        assert.deepStrictEqual(JSON.parse(firstContent.text).error.code, "secret_capability_unavailable");
+      }
+    }),
+  );
+
+  it.effect("passes declared secret injection through the harness boundary without exposing it in tool output", () =>
+    Effect.gen(function* () {
+      let injected = false;
+      let audited = false;
+      const registry = new AgentGatewayToolRegistry([
+        {
+          ...tool("secret_tool", (_args, toolContext) =>
+            Effect.gen(function* () {
+              const result = yield* toolContext
+                .injectSecret!({
+                  scope: "provider:openai",
+                  channel: "environment",
+                  target: "OPENAI_API_KEY",
+                })
+                .pipe(Effect.orDie);
+              injected = result?.value === "raw-secret";
+              yield* toolContext.recordSecretAudit!({
+                scope: "provider:openai",
+                channel: "environment",
+                outcome: "injected",
+              });
+              return { content: [{ type: "text", text: "credential used" }] };
+            }),
+          ),
+          secretBinding: {
+            scope: "provider:openai",
+            channel: "environment" as const,
+            target: "OPENAI_API_KEY",
+          },
+        },
+      ]);
+
+      const result = yield* registry.dispatch(
+        "secret_tool",
+        {},
+        context({
+          injectSecret: () =>
+            Effect.succeed({
+              value: "raw-secret",
+              audit: { scope: "provider:openai", channel: "environment" as const, outcome: "injected" as const },
+            }),
+          recordSecretAudit: () => Effect.sync(() => (audited = true)),
+        }),
+      );
+      assert.equal(injected, true);
+      assert.equal(audited, true);
+      assert.deepStrictEqual(result.content, [{ type: "text", text: "credential used" }]);
     }),
   );
 

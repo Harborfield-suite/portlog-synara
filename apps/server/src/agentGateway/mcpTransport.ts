@@ -3,6 +3,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Option } from "effect";
 
 import type { ProjectionSnapshotQueryShape } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import type { AgentGatewayShape } from "./Services/AgentGateway.ts";
+import type { SecretAuditRecord, SecretBinding, SecretInjectionResult } from "../secrets/secretProtection.ts";
 import type { AgentGatewayCredentialsShape } from "./Services/AgentGatewayCredentials.ts";
 import { extractBearerToken } from "./bearerToken.ts";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./protocol.ts";
 import {
   AgentGatewayToolRegistry,
+  GatewayToolError,
   type ToolContext,
   type ToolEntry,
 } from "./toolRuntime.ts";
@@ -65,6 +67,10 @@ export function makeAgentGatewayMcpTransport(input: {
   readonly requireThreadShell: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThreadShell, unknown>;
+  readonly injectSecret?: (
+    binding: SecretBinding,
+  ) => Effect.Effect<SecretInjectionResult | null, GatewayToolError>;
+  readonly recordSecretAudit?: (record: SecretAuditRecord) => Effect.Effect<void>;
 }): AgentGatewayShape["handleMcpPost"] {
   const registry = new AgentGatewayToolRegistry(input.tools);
   const handleRequest = (request: JsonRpcRequest, context: Omit<ToolContext, "jsonRpcRequestId">) =>
@@ -212,6 +218,8 @@ export function makeAgentGatewayMcpTransport(input: {
         callerCapabilities: callerSession.capabilities,
         callerTurnId: callerWriteAuthority?.turnId ?? null,
         assertCallerTurnActive,
+        ...(input.injectSecret ? { injectSecret: input.injectSecret } : {}),
+        ...(input.recordSecretAudit ? { recordSecretAudit: input.recordSecretAudit } : {}),
       };
 
       const rawMessages = Array.isArray(requestInput.body)

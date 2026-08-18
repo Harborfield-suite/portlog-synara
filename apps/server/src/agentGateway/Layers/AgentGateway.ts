@@ -14,6 +14,8 @@
  * @module agentGateway/Layers/AgentGateway
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   CommandId,
@@ -45,6 +47,12 @@ import { AgentGatewayOperationRepository } from "../Services/AgentGatewayOperati
 import { ProviderDiscoveryService } from "../../provider/Services/ProviderDiscoveryService.ts";
 import { ProviderHealth } from "../../provider/Services/ProviderHealth.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { ProviderCredentials } from "../../providerCredentials.ts";
+import {
+  authorizeSecretCandidate,
+  collectSecretCandidates,
+  parseSecretsFile,
+} from "../../secrets/secretProtection.ts";
 import {
   AGENT_GATEWAY_TARGET_OPTIONS_DESCRIPTION,
   type AgentGatewayProviderAvailability,
@@ -63,7 +71,7 @@ import {
   readRecordArg,
   readStringArg,
 } from "../toolInput.ts";
-import { WRITE_TOOL_ANNOTATIONS, type ToolEntry } from "../toolRuntime.ts";
+import { GatewayToolError, WRITE_TOOL_ANNOTATIONS, type ToolEntry } from "../toolRuntime.ts";
 import { makeAgentGatewayMcpTransport } from "../mcpTransport.ts";
 import { recoverInterruptedAgentGatewayOperations } from "../startupRecovery.ts";
 import { makeCreateThreadsHandler } from "../creationCoordinator.ts";
@@ -92,6 +100,7 @@ export const makeAgentGateway = Effect.gen(function* () {
   const providerDiscovery = yield* ProviderDiscoveryService;
   const providerHealth = yield* ProviderHealth;
   const serverSettings = yield* ServerSettingsService;
+  const providerCredentials = yield* Effect.serviceOption(ProviderCredentials);
   const operationRepository = yield* AgentGatewayOperationRepository;
   const projectionTurns = yield* ProjectionTurnRepository;
   const eventStore = yield* OrchestrationEventStore;
@@ -621,6 +630,74 @@ export const makeAgentGateway = Effect.gen(function* () {
     ...automationTools,
     ...browserTools,
   ];
+  const injectSecret = (binding: import("../../secrets/secretProtection.ts").SecretBinding) =>
+    Effect.gen(function* () {
+      if (Option.isNone(providerCredentials)) {
+        yield* Effect.logWarning("secret injection denied: credential boundary unavailable");
+        return null;
+      }
+      const configuredProviders = yield* providerCredentials.value.listConfiguredByokProviders();
+      const credentialsByProvider = yield* Effect.forEach(configuredProviders, (provider) =>
+        providerCredentials.value.getByokApiKey(provider).pipe(
+          Effect.map((value) => (value ? { provider, value } : null)),
+          Effect.catch(() => Effect.succeed(null)),
+        ),
+      );
+      const secretsFile = yield* Effect.promise(async () => {
+        const contents = await Promise.all(
+          [join(serverConfig.homeDir, "secrets.yml"), join(serverConfig.cwd, "secrets.yml")].map(
+            (filePath) => readFile(filePath, "utf8").catch(() => ""),
+          ),
+        );
+        return contents.map(parseSecretsFile).reduce<Record<string, string>>(
+          (merged, values) => Object.assign(merged, values),
+          {},
+        );
+      });
+      const candidates = collectSecretCandidates({
+        environment: process.env,
+        secretsFile,
+        credentials: credentialsByProvider.filter(
+          (entry): entry is { readonly provider: string; readonly value: string } => entry !== null,
+        ),
+      });
+      const result = authorizeSecretCandidate({
+        candidate: candidates.find((candidate) => candidate.scope === binding.scope),
+        capability: { scope: binding.scope, channels: [binding.channel] },
+        binding,
+      });
+      if (result) {
+        yield* Effect.logInfo("secret injection authorized", {
+          scope: result.audit.scope,
+          channel: result.audit.channel,
+          outcome: result.audit.outcome,
+        });
+      } else {
+        yield* Effect.logWarning("secret injection denied", {
+          scope: binding.scope,
+          channel: binding.channel,
+          outcome: "denied",
+        });
+      }
+      return result;
+    }).pipe(
+      Effect.mapError(
+        (error) =>
+          new GatewayToolError(
+            "secret_injection_failed",
+            "The secret credential boundary could not resolve this request.",
+            { reason: error instanceof Error ? error.message : String(error) },
+          ),
+      ),
+    );
+
+  const recordSecretAudit = (record: import("../../secrets/secretProtection.ts").SecretAuditRecord) =>
+    Effect.logInfo("secret injection audit", {
+      scope: record.scope,
+      channel: record.channel,
+      outcome: record.outcome,
+    });
+
   return {
     handleMcpPost: makeAgentGatewayMcpTransport({
       credentials,
@@ -628,6 +705,8 @@ export const makeAgentGateway = Effect.gen(function* () {
       tools,
       instructions: AGENT_GATEWAY_INSTRUCTIONS,
       requireThreadShell,
+      injectSecret,
+      recordSecretAudit,
     }),
   } satisfies AgentGatewayShape;
 });
