@@ -3,7 +3,12 @@
 // Layer: Chat composer presentation
 // Depends on: provider availability metadata, shared menu primitives, and picker trigger styling.
 
-import { type ModelSlug, type ProviderKind, type ServerProviderStatus } from "@synara/contracts";
+import {
+  PROVIDER_DISPLAY_NAMES,
+  type ModelSlug,
+  type ProviderKind,
+  type ServerProviderStatus,
+} from "@synara/contracts";
 import { resolveSelectableModel } from "@synara/shared/model";
 import * as Schema from "effect/Schema";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
@@ -14,12 +19,14 @@ import {
   Menu,
   MenuItem,
   MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuSub,
   MenuSubTrigger,
   MenuTrigger,
 } from "../ui/menu";
 import { PROVIDER_ICON_COMPONENT_BY_PROVIDER } from "../ProviderIcon";
+import { ModelBrandIcon } from "../ModelBrandIcon";
 import { cn } from "~/lib/utils";
 import { PickerPanelShell } from "./PickerPanelShell";
 import { PickerTriggerButton } from "./PickerTriggerButton";
@@ -155,6 +162,26 @@ function resolveSelectedModelLabel(input: {
   });
 }
 
+function encodeProviderModelSelection(provider: ProviderKind, model: string): string {
+  return JSON.stringify([provider, model]);
+}
+
+function decodeProviderModelSelection(value: string): { provider: ProviderKind; model: string } | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      Array.isArray(parsed) &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    ) {
+      return { provider: parsed[0] as ProviderKind, model: parsed[1] };
+    }
+  } catch {
+    // Ignore malformed menu values; they cannot come from this picker.
+  }
+  return null;
+}
+
 function buildModelSearchText(option: ProviderModelOption): string {
   return [
     option.name,
@@ -168,7 +195,7 @@ function buildModelSearchText(option: ProviderModelOption): string {
     .toLowerCase();
 }
 
-type ProviderModelMenuItemsProps = {
+export type ProviderModelMenuItemsProps = {
   provider: ProviderKind;
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
@@ -178,6 +205,7 @@ type ProviderModelMenuItemsProps = {
   hiddenProviders?: ReadonlyArray<ProviderKind>;
   providerOrder?: ReadonlyArray<ProviderKind>;
   disabled?: boolean;
+  modelSelectionMode?: "provider-first" | "model-first";
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
   // Invoked after a model selection commits so callers can close ancestor
   // menus and refocus the composer.
@@ -192,6 +220,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
 ) {
   const { onAfterSelection } = props;
   const [modelSearchQuery, setModelSearchQuery] = useState("");
+  const [modelProviderFilter, setModelProviderFilter] = useState<ProviderKind | "all">("all");
   const [kiloFavoriteModelSlugs, setKiloFavoriteModelSlugs] = useLocalStorage(
     FAVORITE_MODEL_STORAGE_KEYS.kilo,
     EMPTY_FAVORITE_MODEL_SLUGS,
@@ -284,6 +313,11 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
     }
 
     const providerOptions = props.modelOptionsByProvider[provider];
+    const availability = props.providers
+      ? resolveLiveProviderAvailability(
+          props.providers.find((entry) => entry.provider === provider),
+        )
+      : { disabled: false, label: null };
     const shouldShowSearch =
       (provider === "kilo" ||
         provider === "opencode" ||
@@ -312,7 +346,10 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
       groupedOptions.length > 0 ? (
         <MenuRadioGroup
           value={activeProvider === provider ? props.model : ""}
-          onValueChange={(value) => handleModelChange(provider, value)}
+          onValueChange={(value) => {
+            if (availability.disabled) return;
+            handleModelChange(provider, value);
+          }}
         >
           <ProviderModelOptionGroupList
             groupedOptions={groupedOptions}
@@ -322,6 +359,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
             favoriteProvider={favoriteProvider}
             favoriteModelSlugSet={favoriteModelSlugSet}
             onToggleFavorite={toggleFavoriteModel}
+            disabled={availability.disabled}
             {...(onAfterSelection ? { onAfterSelection } : {})}
           />
         </MenuRadioGroup>
@@ -332,6 +370,12 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
             : "No matches"}
         </div>
       );
+
+    const availabilityNotice = availability.disabled ? (
+      <div role="status" className="px-2 py-1.5 text-[11px] text-muted-foreground">
+        {availability.label}
+      </div>
+    ) : null;
 
     if (!shouldShowSearch) {
       const needsScrollContainer =
@@ -346,11 +390,17 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
               COMPOSER_PICKER_MODEL_LIST_MAX_HEIGHT_CLASS_NAME,
             )}
           >
+            {availabilityNotice}
             {content}
           </div>
         );
       }
-      return content;
+      return (
+        <>
+          {availabilityNotice}
+          {content}
+        </>
+      );
     }
 
     return (
@@ -364,6 +414,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
         bleedParentPadding
         listMaxHeightClassName={COMPOSER_PICKER_MODEL_LIST_MAX_HEIGHT_CLASS_NAME}
       >
+        {availabilityNotice}
         {content}
       </PickerPanelShell>
     );
@@ -371,6 +422,198 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
 
   if (props.lockedProvider !== null) {
     return <>{renderModelRadioGroup(props.lockedProvider)}</>;
+  }
+
+  if (props.modelSelectionMode === "model-first") {
+    const query = deferredModelSearchQuery.trim().toLowerCase();
+    const modelFirstProviders = visibleAvailableProviderOptions.map((providerOption) => {
+      const provider = providerOption.value;
+      const liveProvider = props.providers?.find((entry) => entry.provider === provider);
+      return {
+        provider,
+        availability: props.providers
+          ? resolveLiveProviderAvailability(liveProvider)
+          : { disabled: false, label: null },
+      };
+    });
+    const flatOptions = modelFirstProviders.flatMap(({ provider, availability }) =>
+      props.modelOptionsByProvider[provider].map((option) => ({ provider, option, availability })),
+    );
+    const modelCountByProvider = new Map<ProviderKind, number>();
+    for (const { provider } of flatOptions) {
+      modelCountByProvider.set(provider, (modelCountByProvider.get(provider) ?? 0) + 1);
+    }
+    const providerFilteredOptions =
+      modelProviderFilter === "all"
+        ? flatOptions
+        : flatOptions.filter(({ provider }) => provider === modelProviderFilter);
+    const filteredOptions =
+      query.length === 0
+        ? providerFilteredOptions
+        : providerFilteredOptions.filter(({ provider, option }) =>
+            (buildModelSearchText(option) + " " + PROVIDER_DISPLAY_NAMES[provider])
+              .toLowerCase()
+              .includes(query),
+          );
+    const content =
+      filteredOptions.length > 0 ? (
+        <MenuRadioGroup
+          value={encodeProviderModelSelection(activeProvider, props.model)}
+          onValueChange={(value) => {
+            const selection = decodeProviderModelSelection(value);
+            if (selection) {
+              handleModelChange(selection.provider, selection.model);
+            }
+          }}
+        >
+          <div className="model-picker-frame-table-body">
+            {filteredOptions.map(({ provider, option, availability }) => {
+              const providerLabel = PROVIDER_DISPLAY_NAMES[provider];
+              return (
+                <MenuRadioItem
+                  key={provider + ":" + option.slug}
+                  value={encodeProviderModelSelection(provider, option.slug)}
+                  disabled={availability.disabled}
+                  className="model-picker-frame-model-row"
+                >
+                  <span className="model-picker-frame-model-primary">
+                    <ModelBrandIcon
+                      option={option}
+                      provider={provider}
+                      aria-hidden="true"
+                      className="model-picker-frame-model-icon"
+                    />
+                    <span className="min-w-0">
+                      <span className="model-picker-frame-model-name">{option.name}</span>
+                      <span className="model-picker-frame-model-provider">{providerLabel}</span>
+                    </span>
+                  </span>
+                  <span className="model-picker-frame-model-metadata">
+                    {[
+                      availability.label,
+                      option.upstreamProviderName ?? option.upstreamProviderId,
+                      option.description,
+                    ]
+                      .filter(
+                        (value): value is string => typeof value === "string" && value.trim().length > 0,
+                      )
+                      .join(" · ")}
+                  </span>
+                </MenuRadioItem>
+              );
+            })}
+          </div>
+        </MenuRadioGroup>
+      ) : (
+        <div className="model-picker-frame-empty">No matching models</div>
+      );
+    return (
+      <div className="model-picker-frame">
+        <aside className="model-picker-frame-rail" aria-label="Filter models by provider">
+          <div className="model-picker-frame-rail-heading">Providers</div>
+          <div className="model-picker-frame-provider-list">
+            <button
+              type="button"
+              className="model-picker-frame-provider-button"
+              data-active={modelProviderFilter === "all" ? "" : undefined}
+              aria-pressed={modelProviderFilter === "all"}
+              onClick={() => setModelProviderFilter("all")}
+            >
+              <span className="model-picker-frame-provider-label">
+                <span className="model-picker-frame-status-dot" aria-hidden="true" />
+                All models
+              </span>
+              <span className="model-picker-frame-provider-count">{flatOptions.length}</span>
+            </button>
+            {modelFirstProviders.map(({ provider, availability }) => {
+              const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[provider];
+              const modelCount = modelCountByProvider.get(provider) ?? 0;
+              return (
+                <button
+                  key={provider}
+                  type="button"
+                  className="model-picker-frame-provider-button"
+                  data-active={modelProviderFilter === provider ? "" : undefined}
+                  aria-pressed={modelProviderFilter === provider}
+                  onClick={() => setModelProviderFilter(provider)}
+                >
+                  <span className="model-picker-frame-provider-label">
+                    <span
+                      className="model-picker-frame-status-dot"
+                      data-live={availability.disabled ? undefined : ""}
+                      aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined}
+                    />
+                    <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
+                    <span className="truncate">{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                  </span>
+                  <span className="model-picker-frame-provider-count">{modelCount}</span>
+                  {availability.disabled ? (
+                    <span className="model-picker-frame-provider-status">{availability.label}</span>
+                  ) : null}
+                </button>
+              );
+            })}
+            {visibleUnavailableProviderOptions.map((option) => {
+              const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
+              return (
+                <div
+                  key={option.value}
+                  className="model-picker-frame-provider-button cursor-not-allowed opacity-50"
+                  aria-disabled="true"
+                >
+                  <span className="model-picker-frame-provider-label">
+                    <span
+                      className="model-picker-frame-status-dot"
+                      aria-label="Unavailable"
+                    />
+                    <ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" />
+                    <span className="truncate">{PROVIDER_DISPLAY_NAMES[option.value]}</span>
+                  </span>
+                  <span className="model-picker-frame-provider-count">0</span>
+                  <span className="model-picker-frame-provider-status">Unavailable</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="model-picker-frame-settings">Settings</div>
+        </aside>
+        <section className="model-picker-frame-main" aria-label="Available models">
+          <header className="model-picker-frame-header">
+            <div>
+              <h2 className="model-picker-frame-title">Models</h2>
+              <p className="model-picker-frame-subtitle">All available models</p>
+            </div>
+            <label className="model-picker-frame-search-label">
+              <span className="sr-only">Search models or providers</span>
+              <input
+                autoFocus
+                className="model-picker-frame-search"
+                type="search"
+                placeholder="Search models or providers"
+                value={modelSearchQuery}
+                onChange={(event) => setModelSearchQuery(event.target.value)}
+                onKeyDownCapture={(event) => {
+                  if (
+                    !["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp", "Enter", "Escape"].includes(
+                      event.key,
+                    )
+                  ) {
+                    event.stopPropagation();
+                  }
+                }}
+              />
+            </label>
+          </header>
+          <div className="model-picker-frame-table">
+            <div className="model-picker-frame-table-header" aria-hidden="true">
+              <span>Provider / model</span>
+              <span>Provenance or description</span>
+            </div>
+            <div className="model-picker-frame-scroll">{content}</div>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -435,6 +678,114 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
   );
 };
 
+export function ProviderModelViewer(
+  props: ProviderModelMenuItemsProps & { onClose: () => void },
+) {
+  const { onClose } = props;
+  const [query, setQuery] = useState("");
+  const [providerFilter, setProviderFilter] = useState<ProviderKind | "all">("all");
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const hiddenProviders = new Set(props.hiddenProviders ?? []);
+  const visibleProviders = AVAILABLE_PROVIDER_OPTIONS.filter(
+    (option) => !hiddenProviders.has(option.value) || option.value === props.provider,
+  );
+  const providerEntries = visibleProviders.map((option) => {
+    const liveProvider = props.providers?.find((entry) => entry.provider === option.value);
+    return { option, availability: liveProvider ? resolveLiveProviderAvailability(liveProvider) : { disabled: false, label: null } };
+  });
+  const allModelCount = providerEntries.reduce(
+    (count, { option }) => count + (props.modelOptionsByProvider[option.value]?.length ?? 0),
+    0,
+  );
+  const entries = providerEntries.flatMap(({ option, availability }) =>
+    providerFilter !== "all" && providerFilter !== option.value
+      ? []
+      : (props.modelOptionsByProvider[option.value] ?? []).map((modelOption) => ({
+          provider: option.value,
+          option: modelOption,
+          availability,
+        })),
+  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredEntries = normalizedQuery.length === 0
+    ? entries
+    : entries.filter(({ provider, option }) =>
+        (buildModelSearchText(option) + " " + PROVIDER_DISPLAY_NAMES[provider]).toLowerCase().includes(normalizedQuery),
+      );
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[color-mix(in_oklab,var(--popover)_94%,black)]">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <h1 className="text-sm font-semibold text-foreground">Choose a model</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Select the model for your next turn.</p>
+        </div>
+        <button type="button" className="shrink-0 rounded-md border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none" onClick={onClose}>Close</button>
+      </header>
+      <div className="model-picker-frame min-h-0 min-w-0 flex-1">
+        <aside className="model-picker-frame-rail" aria-label="Filter models by provider">
+          <div className="model-picker-frame-rail-heading">Providers</div>
+          <div className="model-picker-frame-provider-list">
+            <button type="button" className="model-picker-frame-provider-button" data-active={providerFilter === "all" ? "" : undefined} aria-pressed={providerFilter === "all"} onClick={() => setProviderFilter("all")}>
+              <span className="model-picker-frame-provider-label"><span className="model-picker-frame-status-dot" aria-hidden="true" />All models</span>
+              <span className="model-picker-frame-provider-count">{allModelCount}</span>
+            </button>
+            {providerEntries.map(({ option, availability }) => {
+              const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[option.value];
+              const count = props.modelOptionsByProvider[option.value]?.length ?? 0;
+              return (
+                <button key={option.value} type="button" className="model-picker-frame-provider-button" data-active={providerFilter === option.value ? "" : undefined} aria-pressed={providerFilter === option.value} onClick={() => setProviderFilter(option.value)}>
+                  <span className="model-picker-frame-provider-label"><span className="model-picker-frame-status-dot" data-live={availability.disabled ? undefined : ""} aria-label={availability.disabled ? availability.label ?? "Unavailable" : undefined} /><ProviderIcon aria-hidden="true" className="model-picker-frame-provider-icon" /><span className="truncate">{PROVIDER_DISPLAY_NAMES[option.value]}</span></span>
+                  <span className="model-picker-frame-provider-count">{count}</span>
+                  {availability.disabled ? <span className="model-picker-frame-provider-status">{availability.label}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="model-picker-frame-settings">Settings</div>
+        </aside>
+        <section className="model-picker-frame-main" aria-label="Available models">
+          <header className="model-picker-frame-header">
+            <div><h2 className="model-picker-frame-title">Models</h2><p className="model-picker-frame-subtitle">All available models</p></div>
+            <label className="model-picker-frame-search-label"><span className="sr-only">Search models or providers</span><input autoFocus className="model-picker-frame-search" type="search" placeholder="Search models or providers" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+          </header>
+          <div className="model-picker-frame-table">
+            <div className="model-picker-frame-table-header" aria-hidden="true"><span>Provider / model</span><span>Provenance or description</span></div>
+            <div className="model-picker-frame-scroll">
+              <div className="model-picker-frame-table-body">
+                {filteredEntries.length === 0 ? <div className="model-picker-frame-empty">No matching models</div> : filteredEntries.map(({ provider, option, availability }) => {
+                  const isLocked = props.lockedProvider !== null && provider !== props.lockedProvider;
+                  const isSelected = (props.lockedProvider ?? props.provider) === provider && props.model === option.slug;
+                  return (
+                    <button key={provider + ":" + option.slug} type="button" className="model-picker-frame-model-row text-left" data-checked={isSelected ? "" : undefined} disabled={isLocked || props.disabled || availability.disabled} onClick={() => {
+                      if (isLocked || props.disabled || availability.disabled) return;
+                      const resolved = resolveSelectableModel(provider, option.slug, props.modelOptionsByProvider[provider] ?? []);
+                      if (resolved) props.onProviderModelChange(provider, resolved);
+                    }}>
+                      <span className="model-picker-frame-model-primary"><ModelBrandIcon option={option} provider={provider} aria-hidden="true" className="model-picker-frame-model-icon" /><span className="min-w-0"><span className="model-picker-frame-model-name">{option.name}</span><span className="model-picker-frame-model-provider">{PROVIDER_DISPLAY_NAMES[provider]}</span></span></span>
+                      <span className="model-picker-frame-model-metadata">{[availability.label, option.upstreamProviderName ?? option.upstreamProviderId, option.description].filter((value) => typeof value === "string" && value.trim().length > 0).join(" · ")}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 // Resolves the human-readable label for the currently selected model.
 export function resolveProviderModelLabel(input: {
   provider: ProviderKind;
@@ -475,6 +826,8 @@ type ProviderModelPickerProps = {
   onOpenChange?: (open: boolean) => void;
   onSelectionCommitted?: () => void;
   shortcutLabel?: string | null;
+  /** Prefer a single searchable model list over provider-first navigation. */
+  modelSelectionMode?: "provider-first" | "model-first";
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 };
 
@@ -490,7 +843,9 @@ export const ProviderModelPicker = function ProviderModelPicker(props: ProviderM
     model: props.model,
     modelOptionsByProvider: props.modelOptionsByProvider,
   });
-  const ProviderIcon = PROVIDER_ICON_COMPONENT_BY_PROVIDER[activeProvider];
+  const selectedModelOption =
+    props.modelOptionsByProvider[activeProvider]?.find((option) => option.slug === props.model) ??
+    { slug: props.model, name: selectedModelLabel };
 
   const setMenuOpen = (nextOpen: boolean) => {
     if (open === undefined) {
@@ -529,7 +884,9 @@ export const ProviderModelPicker = function ProviderModelPicker(props: ProviderM
       hideLabel={props.hideLabel ?? false}
       className="text-[var(--color-text-foreground)]"
       icon={
-        <ProviderIcon
+        <ModelBrandIcon
+          option={selectedModelOption}
+          provider={activeProvider}
           aria-hidden="true"
           className={cn(
             // opacity-100 opts out of the Button base's [&_svg]:opacity-80 dimming.
@@ -576,7 +933,11 @@ export const ProviderModelPicker = function ProviderModelPicker(props: ProviderM
           <span className="sr-only">{selectedModelLabel}</span>
         </MenuTrigger>
       )}
-      <ComposerPickerMenuPopup align="start" fixedWidth>
+      <ComposerPickerMenuPopup
+        align="start"
+        className={props.modelSelectionMode === "model-first" ? "model-picker-frame-popup" : undefined}
+        fixedWidth={props.modelSelectionMode !== "model-first"}
+      >
         <ProviderModelMenuItems
           provider={props.provider}
           model={props.model}
@@ -589,6 +950,7 @@ export const ProviderModelPicker = function ProviderModelPicker(props: ProviderM
           {...(props.hiddenProviders ? { hiddenProviders: props.hiddenProviders } : {})}
           {...(props.providerOrder ? { providerOrder: props.providerOrder } : {})}
           {...(props.disabled !== undefined ? { disabled: props.disabled } : {})}
+          {...(props.modelSelectionMode ? { modelSelectionMode: props.modelSelectionMode } : {})}
           onProviderModelChange={props.onProviderModelChange}
           onAfterSelection={handleAfterSelection}
         />

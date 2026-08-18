@@ -159,6 +159,7 @@ async function mountPicker(props: {
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProviderStatus>;
   loadingModelProviders?: Partial<Record<ProviderKind, boolean>>;
+  modelSelectionMode?: "provider-first" | "model-first";
   onSelectionCommitted?: () => void;
   modelOptionsByProvider?: Record<
     ProviderKind,
@@ -177,6 +178,7 @@ async function mountPicker(props: {
       {...(props.loadingModelProviders
         ? { loadingModelProviders: props.loadingModelProviders }
         : {})}
+      {...(props.modelSelectionMode ? { modelSelectionMode: props.modelSelectionMode } : {})}
       {...(props.providers ? { providers: props.providers } : {})}
       {...(props.onSelectionCommitted ? { onSelectionCommitted: props.onSelectionCommitted } : {})}
       onProviderModelChange={onProviderModelChange}
@@ -645,6 +647,76 @@ describe("ProviderModelPicker", () => {
     }
   });
 
+  it("keeps unavailable model rows visible but disabled in model-first mode", async () => {
+    const mounted = await mountPicker({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      modelSelectionMode: "model-first",
+      providers: [
+        {
+          provider: "codex",
+          status: "ready",
+          available: true,
+          authStatus: "authenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      const unavailableModel = page.getByRole("menuitemradio", {
+        name: "Claude Opus 4.6",
+      });
+      await expect.element(unavailableModel).toBeInTheDocument();
+      await expect.element(unavailableModel).toHaveAttribute("aria-disabled", "true");
+      await expect.element(unavailableModel).toHaveTextContent("Sign in");
+      expect(mounted.onProviderModelChange).not.toHaveBeenCalled();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps a locked unavailable provider's models visible but disabled", async () => {
+    const mounted = await mountPicker({
+      provider: "claudeAgent",
+      model: "claude-opus-4-6",
+      lockedProvider: "claudeAgent",
+      providers: [
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      const unavailableModel = page.getByRole("menuitemradio", {
+        name: "Claude Sonnet 4.6",
+      });
+      await expect.element(unavailableModel).toBeInTheDocument();
+      await expect.element(unavailableModel).toHaveAttribute("aria-disabled", "true");
+      await expect.element(page.getByRole("status")).toHaveTextContent("Sign in");
+      expect(mounted.onProviderModelChange).not.toHaveBeenCalled();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("does not make providers selectable before live status is known", async () => {
     const mounted = await mountPicker({
       provider: "codex",
@@ -707,6 +779,25 @@ describe("ProviderModelPicker", () => {
 
       await expect.element(page.getByText("Sign in")).not.toBeInTheDocument();
       await expect.element(page.getByText("Unavailable")).not.toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("uses the selected model brand in the collapsed trigger", async () => {
+    const mounted = await mountPicker({
+      provider: "opencode",
+      model: "openai/gpt-5",
+      lockedProvider: "opencode",
+    });
+
+    try {
+      const trigger = Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("GPT-5"),
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger?.querySelector("[data-slot=\"central-icon\"]")).toBeNull();
+      expect(trigger?.querySelector("svg")).not.toBeNull();
     } finally {
       await mounted.cleanup();
     }

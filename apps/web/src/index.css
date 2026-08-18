@@ -2804,6 +2804,329 @@ diffs-container {
   background-color: color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
+/* Model-first picker: an intentionally dense, dark instrument panel while retaining Menu semantics. */
+.model-picker-frame-popup {
+  width: min(72rem, calc(100vw - 1.5rem)) !important;
+  min-width: min(72rem, calc(100vw - 1.5rem)) !important;
+  max-width: calc(100vw - 1.5rem) !important;
+  height: min(42rem, calc(100dvh - 1.5rem));
+  max-height: calc(100dvh - 1.5rem);
+  overflow: hidden;
+  border-radius: 8px;
+  border-color: color-mix(in oklab, var(--foreground) 14%, transparent);
+  background: color-mix(in oklab, var(--popover) 92%, black);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 35%);
+}
+
+.model-picker-frame {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  color: var(--foreground);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.model-picker-frame-rail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+  background: color-mix(in oklab, var(--popover) 86%, black);
+}
+
+.model-picker-frame-rail-heading,
+.model-picker-frame-settings {
+  padding: 0.75rem 0.875rem;
+  color: color-mix(in oklab, var(--foreground) 52%, transparent);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-picker-frame-provider-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.375rem 0.5rem;
+}
+
+.model-picker-frame-provider-button {
+  display: flex;
+  width: 100%;
+  min-height: 2.125rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0.375rem 0.5rem;
+  color: color-mix(in oklab, var(--foreground) 72%, transparent);
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.model-picker-frame-provider-button:hover,
+.model-picker-frame-provider-button[data-active] {
+  border-color: color-mix(in oklab, var(--foreground) 13%, transparent);
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  color: var(--foreground);
+}
+
+.model-picker-frame-provider-button:focus-visible,
+.model-picker-frame-model-row:focus-visible,
+.model-picker-frame-search:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--primary) 72%, white);
+  outline-offset: -1px;
+}
+
+.model-picker-frame-provider-label,
+.model-picker-frame-model-primary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.model-picker-frame-provider-count {
+  color: color-mix(in oklab, var(--foreground) 48%, transparent);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+}
+.model-picker-frame-provider-status {
+  color: color-mix(in oklab, var(--foreground) 42%, transparent);
+  font-size: .5625rem;
+}
+
+.model-picker-frame-provider-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.model-picker-frame-status-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  flex: none;
+  border: 1px solid color-mix(in oklab, var(--foreground) 43%, transparent);
+  border-radius: 999px;
+}
+
+.model-picker-frame-status-dot[data-live] {
+  border-color: #55c991;
+  background: #55c991;
+  box-shadow: 0 0 0 2px rgb(85 201 145 / 12%);
+}
+
+.model-picker-frame-provider-icon,
+.model-picker-frame-model-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  opacity: 0.8;
+}
+
+.model-picker-frame-settings {
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+.model-picker-frame-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.model-picker-frame-header {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+  padding: 0.75rem 1rem;
+}
+
+.model-picker-frame-title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.model-picker-frame-subtitle {
+  margin: 0.1875rem 0 0;
+  color: color-mix(in oklab, var(--foreground) 53%, transparent);
+  font-size: 0.625rem;
+}
+
+.model-picker-frame-search-label {
+  min-width: min(18rem, 52%);
+}
+
+.model-picker-frame-search {
+  width: 100%;
+  height: 2rem;
+  border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  padding: 0 0.625rem;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.model-picker-frame-search::placeholder {
+  color: color-mix(in oklab, var(--foreground) 43%, transparent);
+}
+
+.model-picker-frame-table {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.model-picker-frame-table-header,
+.model-picker-frame-model-row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) minmax(10rem, 0.8fr);
+  align-items: center;
+  column-gap: 1rem;
+}
+
+.model-picker-frame-table-header {
+  min-height: 2rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 9%, transparent);
+  padding: 0 1rem;
+  color: color-mix(in oklab, var(--foreground) 44%, transparent);
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.model-picker-frame-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.model-picker-frame-table-body {
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.model-picker-frame-model-row {
+  width: 100%;
+  min-height: 3rem;
+  margin: 1px 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0.375rem 0.5rem;
+  color: color-mix(in oklab, var(--foreground) 82%, transparent);
+}
+
+.model-picker-frame-model-row:hover,
+.model-picker-frame-model-row[data-highlighted] {
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+
+.model-picker-frame-model-row[data-checked] {
+  border-color: color-mix(in oklab, var(--primary) 58%, transparent);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: var(--foreground);
+}
+
+.model-picker-frame-model-name,
+.model-picker-frame-model-provider,
+.model-picker-frame-model-metadata {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-frame-model-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.model-picker-frame-model-provider,
+.model-picker-frame-model-metadata {
+  margin-top: 0.125rem;
+  color: color-mix(in oklab, var(--foreground) 52%, transparent);
+  font-size: 0.625rem;
+}
+
+.model-picker-frame-model-metadata {
+  margin-top: 0;
+}
+
+.model-picker-frame-empty {
+  padding: 1rem;
+  color: color-mix(in oklab, var(--foreground) 52%, transparent);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 40rem) {
+  .model-picker-frame-popup {
+    height: min(40rem, calc(100dvh - 1rem));
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .model-picker-frame {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .model-picker-frame-rail {
+    max-height: 9rem;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+  }
+
+  .model-picker-frame-rail-heading,
+  .model-picker-frame-settings {
+    display: none;
+  }
+
+  .model-picker-frame-provider-list {
+    display: flex;
+    flex: 0 1 auto;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.375rem;
+  }
+
+  .model-picker-frame-provider-button {
+    width: auto;
+    min-width: max-content;
+  }
+
+  .model-picker-frame-table-header,
+  .model-picker-frame-model-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-picker-frame-table-header span:last-child,
+  .model-picker-frame-model-metadata {
+    display: none;
+  }
+
+  .model-picker-frame-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .model-picker-frame-search-label {
+    min-width: 0;
+  }
+}
+
 @keyframes ultrathink-rainbow {
   0% {
     background-position: 0% 50%;

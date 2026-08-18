@@ -472,6 +472,7 @@ import { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import {
   AVAILABLE_PROVIDER_OPTIONS,
   ProviderModelPicker,
+  ProviderModelViewer,
   resolveProviderModelLabel,
 } from "./chat/ProviderModelPicker";
 import { ComposerModelEffortPicker } from "./chat/ComposerModelEffortPicker";
@@ -1089,7 +1090,7 @@ interface ChatViewProps {
   threadId: ThreadId;
   paneScopeId?: string;
   surfaceMode?: "single" | "split";
-  presentationMode?: "default" | "editor";
+  presentationMode?: "default" | "editor" | "model";
   isFocusedPane?: boolean;
   panelState?: SplitViewPanePanelState;
   onToggleDiffPanel?: () => void;
@@ -2224,7 +2225,7 @@ export default function ChatView({
     selectedProviderRuntimeModelDiscoveryPending,
   } = useProviderModelCatalog({
     selectedProvider,
-    discoveryEnabled: isModelPickerOpen,
+    discoveryEnabled: isModelPickerOpen || presentationMode === "model",
     cwd: providerModelDiscoveryCwd,
     modelHintByProvider: composerModelHintByProvider,
     agentDiscoveryPolicy: "eager-core",
@@ -4248,12 +4249,30 @@ export default function ChatView({
     };
   }, [focusComposer, secondaryChromeReady, secondaryChromeThreadId]);
   // Keep the two composer picker menus mutually exclusive so shortcuts always open one surface.
-  const handleModelPickerOpenChange = useCallback((open: boolean) => {
-    setIsModelPickerOpen(open);
-    if (open) {
-      setIsTraitsPickerOpen(false);
-    }
-  }, []);
+  const handleModelPickerOpenChange = useCallback(
+    (open: boolean) => {
+      setIsModelPickerOpen(open);
+      if (open) {
+        setIsTraitsPickerOpen(false);
+        void navigate({
+          to: "/$threadId",
+          params: { threadId },
+          search: (previous) => ({ ...stripDiffSearchParams(previous), view: "model" }),
+        });
+      } else if (presentationMode === "model") {
+        void navigate({
+          to: "/$threadId",
+          params: { threadId },
+          search: (previous) => {
+            const { view: _view, editorFilePath: _editorFilePath, ...rest } =
+              stripDiffSearchParams(previous);
+            return rest;
+          },
+        });
+      }
+    },
+    [navigate, presentationMode, threadId],
+  );
   const handleTraitsPickerOpenChange = useCallback((open: boolean) => {
     setIsTraitsPickerOpen(open);
     if (open) {
@@ -9322,6 +9341,7 @@ export default function ChatView({
         loadingModelProviders={loadingModelProviders}
         hiddenProviders={settings.hiddenProviders}
         providerOrder={settings.providerOrder}
+        modelSelectionMode="model-first"
         onProviderModelChange={onProviderModelSelect}
         onSelectionCommitted={scheduleComposerFocus}
         open={isModelPickerOpen}
@@ -9358,6 +9378,7 @@ export default function ChatView({
       loadingModelProviders={loadingModelProviders}
       hiddenProviders={settings.hiddenProviders}
       providerOrder={settings.providerOrder}
+      modelSelectionMode="model-first"
       threadId={threadId}
       runtimeModel={selectedRuntimeModel}
       runtimeModels={runtimeModelsByProvider[selectedProvider]}
@@ -9963,6 +9984,9 @@ export default function ChatView({
       setComposerHighlightedItemId("review-target:changes");
     },
     setComposerDraftProviderModelOptions,
+    openModelPicker: () => {
+      handleModelPickerOpenChange(true);
+    },
     editorActions: slashEditorActions,
   });
 
@@ -10016,6 +10040,15 @@ export default function ChatView({
         return;
       }
       if (item.type === "provider-native-command") {
+        if (item.command.toLowerCase() === "model") {
+          handleModelPickerOpenChange(true);
+          applyComposerTriggerReplacement({
+            snapshot,
+            trigger,
+            base: "",
+          });
+          return;
+        }
         if (selectedProvider === "codex" && item.command.toLowerCase() === "review") {
           setComposerCommandPicker("review-target");
           setComposerHighlightedItemId("review-target:changes");
@@ -10083,6 +10116,7 @@ export default function ChatView({
       }
     },
     [
+      handleModelPickerOpenChange,
       applyComposerTriggerReplacement,
       scheduleComposerFocus,
       handleForkTargetSelection,
@@ -10580,6 +10614,18 @@ export default function ChatView({
     setDismissedRateLimitBannerKey(activeRateLimitBannerDismissalKey);
   }, [activeRateLimitBannerDismissalKey]);
 
+  const closeModelViewer = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => {
+        const { view: _view, editorFilePath: _editorFilePath, ...rest } =
+          stripDiffSearchParams(previous);
+        return rest;
+      },
+    });
+  }, [navigate, threadId]);
+
   // Empty state: no active thread
   if (!activeThread) {
     return (
@@ -10617,6 +10663,25 @@ export default function ChatView({
             <p className="text-sm">Select a thread or create a new one to get started.</p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (presentationMode === "model" && activeThread) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden text-foreground">
+        <ProviderModelViewer
+          provider={selectedProvider}
+          model={selectedModelForPickerWithCustomFallback}
+          lockedProvider={lockedProvider}
+          providers={providerStatuses}
+          modelOptionsByProvider={modelOptionsByProvider}
+          loadingModelProviders={loadingModelProviders}
+          hiddenProviders={settings.hiddenProviders}
+          providerOrder={settings.providerOrder}
+          onProviderModelChange={onProviderModelSelect}
+          onClose={closeModelViewer}
+        />
       </div>
     );
   }
@@ -10898,7 +10963,6 @@ export default function ChatView({
     onRemoveThreadMarker: handleRemoveThreadMarker,
     onRenameThreadMarker: handleRenameThreadMarker,
     onNotesChange: handleNotesChange,
-    onOpenEditorView: viewModeAction?.onClick ?? null,
     onClose: closeEnvironmentPanelAfterAction,
     onRegisterCommitAndPushTrigger,
   };
@@ -11548,6 +11612,7 @@ export default function ChatView({
           rightDockOpen={rightDockOpen}
           {...(onToggleRightDock ? { onToggleRightDock } : {})}
           environment={isEditorRail ? null : environmentHeaderState}
+          viewModeAction={isEditorRail ? null : viewModeAction}
           surfaceMode={surfaceMode}
           chatLayoutAction={
             surfaceMode === "single" && onSplitSurface

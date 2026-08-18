@@ -1707,15 +1707,22 @@ function dispatchComposerFocusToggleShortcut(): KeyboardEvent {
   return event;
 }
 
-// The composer model/effort shortcuts both drop into the same combined picker,
-// rendered as a Base UI menu popup. Provider and effort detail live in lazily
-// mounted submenus, so the reliable signal that the surface opened is the popup
-// mounting with the active model label (the fixture pins the thread to gpt-5).
+// Model shortcuts now open the route-level model viewer. The existing model-first
+// frame remains the stable semantic signal because it is shared by the full-page
+// surface and the legacy picker implementation.
+async function waitForModelViewerSurfaceOpen(): Promise<void> {
+  await vi.waitFor(() => {
+    expect(document.body.textContent ?? "").toContain("Choose a model");
+    expect(document.body.textContent ?? "").toContain("Select the model for your next turn.");
+    expect(document.querySelector('[aria-label="Filter models by provider"]')).not.toBeNull();
+    expect(document.body.textContent ?? "").toContain("GPT-5");
+  });
+}
+
 async function waitForComposerPickerSurfaceOpen(): Promise<void> {
   await vi.waitFor(() => {
     const popup = document.querySelector('[data-slot="menu-popup"]');
     expect(popup).not.toBeNull();
-    expect(popup?.textContent ?? "").toContain("GPT-5");
   });
 }
 
@@ -4304,7 +4311,80 @@ describe("ChatView timeline estimator parity (full app)", () => {
       composerEditor.focus();
       dispatchComposerPickerShortcut(composerEditor, "m");
 
-      await waitForComposerPickerSurfaceOpen();
+      await waitForModelViewerSurfaceOpen();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("opens the model picker for standalone /model without starting a turn", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-model-picker-slash-command" as MessageId,
+        targetText: "model picker slash command",
+      }),
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "/model");
+      const composerEditor = await waitForComposerEditor();
+      await vi.waitFor(() => {
+        expect(composerEditor.textContent ?? "").toContain("/model");
+      });
+
+      wsRequests.length = 0;
+      const sendButton = await waitForSendButton();
+      sendButton.click();
+
+      await waitForModelViewerSurfaceOpen();
+      await vi.waitFor(() => {
+        expect(composerEditor.textContent ?? "").toBe("");
+      });
+      expect(hasDispatchedCommandType("thread.turn.start")).toBe(false);
+      const closeButton = page.getByRole("button", { name: "Close", exact: true });
+      await expect.element(closeButton).toBeInTheDocument();
+      await closeButton.click();
+      await vi.waitFor(() => {
+        expect((mounted.router.state.location.search as { view?: unknown }).view).toBeUndefined();
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("opens the model picker when Enter confirms standalone /model", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-model-picker-enter" as MessageId,
+        targetText: "model picker Enter activation",
+      }),
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "/model");
+      const composerEditor = await waitForComposerEditor();
+      await vi.waitFor(() => {
+        expect(composerEditor.textContent ?? "").toContain("/model");
+      });
+      composerEditor.focus();
+      wsRequests.length = 0;
+      const enterEvent = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      });
+      composerEditor.dispatchEvent(enterEvent);
+
+      await waitForModelViewerSurfaceOpen();
+      await vi.waitFor(() => {
+        expect(composerEditor.textContent ?? "").toBe("");
+      });
+      expect(enterEvent.defaultPrevented).toBe(true);
+      expect(hasDispatchedCommandType("thread.turn.start")).toBe(false);
     } finally {
       await mounted.cleanup();
     }
@@ -4329,7 +4409,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         expect(
           useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]?.modelSelectionByProvider
             .codex,
-        ).toMatchObject({ provider: "codex", model: "gpt-5.5" });
+        ).toMatchObject({ provider: "codex", model: "gpt-5.6-sol" });
       });
       expect(document.querySelector('[data-slot="menu-popup"]')).toBeNull();
 
@@ -4378,7 +4458,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       composerEditor.focus();
       dispatchConfiguredShortcut(composerEditor, { key: "m", altKey: true });
 
-      await waitForComposerPickerSurfaceOpen();
+      await waitForModelViewerSurfaceOpen();
     } finally {
       await mounted.cleanup();
     }
