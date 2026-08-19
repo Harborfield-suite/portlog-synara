@@ -19,7 +19,7 @@ describe("local DEXPI renderer contract", () => {
       scenePath: "/tmp/portlog-artifact/scene.json",
       diagnosticsPath: "/tmp/portlog-artifact/diagnostics.json",
     });
-    expect(DEXPI_RENDERER_PROTOCOL_VERSION).toBe(1);
+    expect(DEXPI_RENDERER_PROTOCOL_VERSION).toBe(2);
   });
 
   it("reuses a complete artifact for the same source hash", async () => {
@@ -34,7 +34,10 @@ describe("local DEXPI renderer contract", () => {
     const paths = resolveDexpiArtifactPaths(outputDir);
     await Promise.all([
       writeFile(paths.svgPath, '<svg><use data-id="P-101" /></svg>'),
-      writeFile(paths.scenePath, JSON.stringify({ symbols: [{ id: "P-101" }], polylines: [] })),
+      writeFile(
+        paths.scenePath,
+        JSON.stringify({ symbols: [{ id: "P-101" }], polylines: [], entities: {} }),
+      ),
       writeFile(paths.diagnosticsPath, JSON.stringify({ report: {} })),
       writeFile(
         paths.manifestPath,
@@ -51,7 +54,7 @@ describe("local DEXPI renderer contract", () => {
     ]);
 
     expect(await readDexpiArtifactManifest(paths.manifestPath)).toEqual({
-      protocolVersion: 1,
+      protocolVersion: DEXPI_RENDERER_PROTOCOL_VERSION,
       sourceSha256,
       artifacts: {
         svg: "rendered.svg",

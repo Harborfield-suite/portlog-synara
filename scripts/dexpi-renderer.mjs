@@ -6,7 +6,7 @@ import { readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import { promisify } from "node:util";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-export const DEXPI_RENDERER_PROTOCOL_VERSION = 1;
+export const DEXPI_RENDERER_PROTOCOL_VERSION = 2;
 
 const execFilePromise = promisify(nodeExecFile);
 const PYDEXPI_RENDERER_PROGRAM = String.raw`
@@ -27,6 +27,56 @@ spec.loader.exec_module(module)
 root = ET.parse(source_path).getroot()
 name = source_path.stem
 scene, catalogue = module.build_scene(root, name)
+
+# Keep the inspector grounded in the source fixture without introducing a
+# generalized semantic projection. The scene is the stable, local handoff.
+entities = {}
+for element in root.iter():
+    entity_id = element.attrib.get("ID")
+    if not entity_id:
+        continue
+    properties = {
+        key: value
+        for key, value in element.attrib.items()
+        if key not in {"ID", "ComponentName", "ComponentClass", "ComponentClassURI"}
+    }
+    for generic in element.findall(".//GenericAttribute"):
+        name_value = generic.attrib.get("Name")
+        if name_value:
+            properties[name_value] = generic.attrib.get("Value", "")
+    references = sorted({
+        association.attrib.get("ItemID")
+        for association in element.findall(".//Association")
+        if association.attrib.get("ItemID")
+    })
+    entities[entity_id] = {
+        "id": entity_id,
+        "element": element.tag,
+        "componentClass": element.attrib.get("ComponentClass", ""),
+        "componentName": element.attrib.get("ComponentName", ""),
+        "properties": properties,
+        "sourceReferences": references,
+        "connections": [],
+    }
+
+for owner in root.iter():
+    owner_id = owner.attrib.get("ID", "")
+    for connection in owner.findall("Connection"):
+        from_id = connection.attrib.get("FromID", "")
+        to_id = connection.attrib.get("ToID", "")
+        record = {
+            "id": f"{owner_id}:{from_id}:{to_id}",
+            "ownerId": owner_id,
+            "fromId": from_id,
+            "fromNode": connection.attrib.get("FromNode", ""),
+            "toId": to_id,
+            "toNode": connection.attrib.get("ToNode", ""),
+        }
+        for endpoint_id in (from_id, to_id):
+            if endpoint_id in entities:
+                entities[endpoint_id]["connections"].append(record)
+
+scene["entities"] = entities
 svg, extent = module.scene_to_svg(scene, catalogue)
 output_dir.mkdir(parents=True, exist_ok=True)
 (output_dir / "rendered.svg").write_text(svg, encoding="utf-8")
@@ -120,7 +170,10 @@ async function validateArtifactContents(paths) {
     scene === null ||
     typeof scene !== "object" ||
     !Array.isArray(scene.symbols) ||
-    !Array.isArray(scene.polylines)
+    !Array.isArray(scene.polylines) ||
+    scene.entities === null ||
+    typeof scene.entities !== "object" ||
+    Array.isArray(scene.entities)
   ) {
     throw new Error("The pydexpi renderer produced an invalid scene artifact.");
   }

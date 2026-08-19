@@ -1,14 +1,15 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent, type WheelEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
-
 import {
-  isLocalPreviewGrantUsable,
-  projectLocalPreviewGrantQueryOptions,
-  projectReadFileQueryOptions,
-} from "~/lib/projectReactQuery";
+  useMemo,
+  useState,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent,
+} from "react";
 import { cn } from "~/lib/utils";
 
-function sanitizeSvgMarkup(contents: string): string | null {
+import { usePortLogLocalFile } from "./usePortLogLocalFile";
+
+function sanitizeSvgMarkup(contents: string, selectedEntityId: string | null): string | null {
   if (typeof DOMParser === "undefined" || typeof XMLSerializer === "undefined") {
     return null;
   }
@@ -34,31 +35,51 @@ function sanitizeSvgMarkup(contents: string): string | null {
       }
     }
   }
+  if (selectedEntityId) {
+    const selected = Array.from(root.querySelectorAll("[data-id]")).find(
+      (element) => element.getAttribute("data-id") === selectedEntityId,
+    );
+    if (selected) {
+      const namespace = "http://www.w3.org/2000/svg";
+      let defs = root.querySelector("defs");
+      if (!defs) {
+        defs = document.createElementNS(namespace, "defs");
+        root.insertBefore(defs, root.firstChild);
+      }
+      const filter = document.createElementNS(namespace, "filter");
+      filter.setAttribute("id", "portlog-selection-glow");
+      filter.setAttribute("x", "-50%");
+      filter.setAttribute("y", "-50%");
+      filter.setAttribute("width", "200%");
+      filter.setAttribute("height", "200%");
+      const glow = document.createElementNS(namespace, "feDropShadow");
+      glow.setAttribute("dx", "0");
+      glow.setAttribute("dy", "0");
+      glow.setAttribute("stdDeviation", "1.5");
+      glow.setAttribute("flood-color", "#0ea5e9");
+      glow.setAttribute("flood-opacity", "0.95");
+      filter.append(glow);
+      defs.append(filter);
+      selected.setAttribute("data-selected", "true");
+      selected.setAttribute("filter", "url(#portlog-selection-glow)");
+    }
+  }
   return new XMLSerializer().serializeToString(root);
 }
 
-export function PortLogSvgPreview(props: { svgPath: string; className?: string }) {
+export function PortLogSvgPreview(props: {
+  svgPath: string;
+  className?: string;
+  selectedEntityId?: string | null;
+  onEntitySelect?: (entityId: string | null) => void;
+}) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  const grantQuery = useQuery(
-    projectLocalPreviewGrantQueryOptions({
-      path: props.svgPath,
-      enabled: props.svgPath.length > 0,
-    }),
-  );
-  const grant = isLocalPreviewGrantUsable(grantQuery.data) ? grantQuery.data?.grant : null;
-  const fileQuery = useQuery(
-    projectReadFileQueryOptions({
-      cwd: null,
-      relativePath: props.svgPath,
-      previewGrant: grant,
-      enabled: grant !== null,
-    }),
-  );
+  const { contents, grantQuery, fileQuery } = usePortLogLocalFile(props.svgPath);
   const markup = useMemo(
-    () => (fileQuery.data?.contents ? sanitizeSvgMarkup(fileQuery.data.contents) : null),
-    [fileQuery.data?.contents],
+    () => (contents ? sanitizeSvgMarkup(contents, props.selectedEntityId ?? null) : null),
+    [contents, props.selectedEntityId],
   );
 
   const reset = () => {
@@ -83,6 +104,12 @@ export function PortLogSvgPreview(props: { svgPath: string; className?: string }
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setDrag(null);
+  };
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const entity = target.closest("[data-id]");
+    props.onEntitySelect?.(entity?.getAttribute("data-id") ?? null);
   };
 
   return (
@@ -128,6 +155,7 @@ export function PortLogSvgPreview(props: { svgPath: string; className?: string }
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onWheel={handleWheel}
+          onClick={handleClick}
         >
           <div
             className="origin-top-left"

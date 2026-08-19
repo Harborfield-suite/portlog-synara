@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { DesktopDexpiImportResult } from "@synara/contracts";
 
+import { PortLogEntityInspector, parsePortLogDexpiEntities } from "./PortLogEntityInspector";
 import { PortLogSvgPreview } from "./PortLogSvgPreview";
+import { usePortLogLocalFile } from "./usePortLogLocalFile";
 
 export function PortLogDexpiWorkbench() {
   const [artifact, setArtifact] = useState<DesktopDexpiImportResult | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   const importSource = async () => {
     const bridge = window.desktopBridge?.dexpi;
@@ -20,6 +23,7 @@ export function PortLogDexpiWorkbench() {
       const nextArtifact = await bridge.importSource();
       if (nextArtifact) {
         setArtifact(nextArtifact);
+        setSelectedEntityId(null);
         setStatus(nextArtifact.cached ? "Loaded cached drawing" : "Rendered drawing");
       }
     } catch (error) {
@@ -43,12 +47,42 @@ export function PortLogDexpiWorkbench() {
         {status ? <span role="status">{status}</span> : null}
       </div>
       {artifact ? (
-        <PortLogSvgPreview svgPath={artifact.svgPath} />
+        <ImportedDexpiArtifact
+          artifact={artifact}
+          selectedEntityId={selectedEntityId}
+          onEntitySelect={setSelectedEntityId}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           Import a DEXPI XML drawing to open its source-faithful SVG representation.
         </div>
       )}
+    </div>
+  );
+}
+
+function ImportedDexpiArtifact(props: {
+  artifact: DesktopDexpiImportResult;
+  selectedEntityId: string | null;
+  onEntitySelect: (entityId: string | null) => void;
+}) {
+  const sceneFile = usePortLogLocalFile(props.artifact.scenePath);
+  const entities = useMemo(
+    () => parsePortLogDexpiEntities(sceneFile.contents),
+    [sceneFile.contents],
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      <PortLogSvgPreview
+        svgPath={props.artifact.svgPath}
+        selectedEntityId={props.selectedEntityId}
+        onEntitySelect={props.onEntitySelect}
+      />
+      <PortLogEntityInspector
+        entity={props.selectedEntityId ? entities[props.selectedEntityId] : undefined}
+        entities={entities}
+      />
     </div>
   );
 }

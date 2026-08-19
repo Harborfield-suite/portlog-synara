@@ -1,4 +1,4 @@
-export const DEXPI_RENDERER_PROTOCOL_VERSION: 1;
+export const DEXPI_RENDERER_PROTOCOL_VERSION: 2;
 
 export type DexpiArtifactPaths = {
   manifestPath: string;
