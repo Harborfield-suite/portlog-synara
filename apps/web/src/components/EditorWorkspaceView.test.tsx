@@ -190,7 +190,7 @@ describe("EditorWorkspaceView", () => {
     expect(hiddenIndex).toBeGreaterThan(-1);
   });
 
-  it("renders the PortLog xyflow craft pane when centerMode is drawing", () => {
+  it("renders the PortLog DEXPI workbench when centerMode is drawing", () => {
     const queryClient = new QueryClient();
     const markup = renderToStaticMarkup(
       <QueryClientProvider client={queryClient}>
@@ -215,8 +215,8 @@ describe("EditorWorkspaceView", () => {
       </QueryClientProvider>,
     );
 
-    expect(markup).toContain('data-portlog-craft="xyflow"');
-    expect(markup).toContain("xyflow baseline");
+    expect(markup).toContain('data-portlog-craft="dexpi-svg"');
+    expect(markup).toContain("source-faithful SVG representation");
     expect(markup).toContain('aria-label="P&amp;ID drawing"');
   });
 

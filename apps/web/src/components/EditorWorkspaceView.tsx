@@ -25,7 +25,7 @@ import {
   SearchIcon,
   WorkflowIcon,
 } from "~/lib/icons";
-import { PortLogCraftPane } from "../portlog/PortLogCraftPane";
+import { PortLogDexpiWorkbench } from "../portlog/PortLogDexpiWorkbench";
 import {
   useDesktopTopBarTrafficLightGutterClassName,
   useDesktopTopBarWindowControlsGutterClassName,
@@ -643,7 +643,7 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
             </div>
             {props.centerMode === "drawing" ? (
               <div className="flex min-h-0 min-w-0 flex-1">
-                <PortLogCraftPane />
+                <PortLogDexpiWorkbench />
               </div>
             ) : null}
             {props.centerMode === "file" ? (
