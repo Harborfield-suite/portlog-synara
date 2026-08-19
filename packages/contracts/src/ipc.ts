@@ -489,6 +489,16 @@ export interface SynaraStorageSnapshot {
   readonly entries: Readonly<Record<string, string>>;
 }
 
+export interface DesktopDexpiImportResult {
+  readonly sourcePath: string;
+  readonly sourceFilename: string;
+  readonly sourceSha256: string;
+  readonly svgPath: string;
+  readonly scenePath: string;
+  readonly diagnosticsPath: string;
+  readonly cached: boolean;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   /**
@@ -553,6 +563,9 @@ export interface DesktopBridge {
   storageMigration: {
     readSnapshot: () => SynaraStorageSnapshot | null;
     acknowledgeSnapshot: () => Promise<void>;
+  };
+  dexpi: {
+    importSource: () => Promise<DesktopDexpiImportResult | null>;
   };
   server?: {
     transcribeVoice: (

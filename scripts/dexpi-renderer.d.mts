@@ -23,7 +23,8 @@ export function readDexpiArtifactManifest(
 ): Promise<DexpiArtifactManifest | null>;
 export function renderDexpiSource(input: {
   sourcePath: string;
-  outputDir: string;
+  outputDir?: string;
+  cacheRoot?: string;
   rendererPath?: string;
   pythonPath?: string;
   execFile?: (

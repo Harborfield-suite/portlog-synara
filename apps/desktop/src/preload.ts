@@ -183,6 +183,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     readSnapshot: () => ipcRenderer.sendSync(IPC.storageMigration.read),
     acknowledgeSnapshot: () => ipcRenderer.invoke(IPC.storageMigration.acknowledge),
   },
+  dexpi: {
+    importSource: () => ipcRenderer.invoke(IPC.dexpiImportSource),
+  },
   server: {
     transcribeVoice: (input) => ipcRenderer.invoke(IPC.transcribeVoice, input),
   },

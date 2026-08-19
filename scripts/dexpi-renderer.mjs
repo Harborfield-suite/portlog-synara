@@ -151,10 +151,15 @@ async function invokeRenderer(execFile, pythonPath, rendererPath, sourcePath, ou
 
 export async function renderDexpiSource(input) {
   const sourcePath = resolve(input.sourcePath);
-  const outputDir = resolve(input.outputDir);
+  const sourceSha256 = await sha256File(sourcePath);
+  const outputDirectory =
+    input.outputDir ?? (input.cacheRoot ? join(resolve(input.cacheRoot), sourceSha256) : null);
+  if (!outputDirectory) {
+    throw new Error("Either outputDir or cacheRoot must be provided.");
+  }
+  const outputDir = resolve(outputDirectory);
   const rendererPath = input.rendererPath ? resolve(input.rendererPath) : null;
   const paths = resolveDexpiArtifactPaths(outputDir);
-  const sourceSha256 = await sha256File(sourcePath);
   const cachedManifest = await readDexpiArtifactManifest(paths.manifestPath);
 
   if (cachedManifest?.sourceSha256 === sourceSha256 && (await isCompleteArtifact(paths))) {
@@ -230,7 +235,7 @@ function parseArgs(argv) {
   return values;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+async function runCli() {
   try {
     const args = parseArgs(process.argv.slice(2));
     const result = await renderDexpiSource({
@@ -244,4 +249,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void runCli();
 }

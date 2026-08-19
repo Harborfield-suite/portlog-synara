@@ -135,6 +135,7 @@ import {
   shouldCheckForUpdatesOnForeground,
 } from "./updateState";
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
+import { renderDexpiSource } from "../../../scripts/dexpi-renderer.mjs";
 import {
   applyDesktopPhysicalZoomAction,
   resolveDesktopMenuAccelerator,
@@ -3525,6 +3526,48 @@ function registerIpcHandlers(): void {
   ipcMain.removeHandler(IPC.storageMigration.acknowledge);
   ipcMain.handle(IPC.storageMigration.acknowledge, async () => {
     await acknowledgeSynaraStorageSnapshot(storageSnapshotPath);
+  });
+
+  ipcMain.removeHandler(IPC.dexpiImportSource);
+  ipcMain.handle(IPC.dexpiImportSource, async () => {
+    const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    const result = owner
+      ? await dialog.showOpenDialog(owner, {
+          properties: ["openFile"],
+          filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+        })
+      : await dialog.showOpenDialog({
+          properties: ["openFile"],
+          filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+        });
+    if (result.canceled) return null;
+
+    const selectedPath = result.filePaths[0];
+    if (!selectedPath || Path.extname(selectedPath).toLowerCase() !== ".xml") {
+      throw new Error("Select a DEXPI XML source file.");
+    }
+
+    const rendererPath = process.env.SYNARA_PYDEXPI_SPIKE?.trim();
+    if (!rendererPath) {
+      throw new Error(
+        "The local pydexpi renderer is not configured. Set SYNARA_PYDEXPI_SPIKE and relaunch Synara.",
+      );
+    }
+
+    const artifact = await renderDexpiSource({
+      sourcePath: selectedPath,
+      cacheRoot: Path.join(BASE_DIR, "artifacts", "dexpi"),
+      rendererPath,
+    });
+    return {
+      sourcePath: Path.resolve(selectedPath),
+      sourceFilename: Path.basename(selectedPath),
+      sourceSha256: artifact.sourceSha256,
+      svgPath: artifact.svgPath,
+      scenePath: artifact.scenePath,
+      diagnosticsPath: artifact.diagnosticsPath,
+      cached: artifact.cached,
+    };
   });
 
   ipcMain.removeAllListeners(IPC.wsUrl);

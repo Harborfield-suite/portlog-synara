@@ -25,11 +25,12 @@ describe("local DEXPI renderer contract", () => {
   it("reuses a complete artifact for the same source hash", async () => {
     const root = await mkdtemp(join(tmpdir(), "portlog-dexpi-test-"));
     const sourcePath = join(root, "drawing.xml");
-    const outputDir = join(root, "artifact");
+    const cacheRoot = join(root, "cache");
     const sourceContents = "<Drawing />";
     await writeFile(sourcePath, sourceContents);
-    await mkdir(outputDir);
     const sourceSha256 = createHash("sha256").update(sourceContents).digest("hex");
+    const outputDir = join(cacheRoot, sourceSha256);
+    await mkdir(outputDir, { recursive: true });
     const paths = resolveDexpiArtifactPaths(outputDir);
     await Promise.all([
       writeFile(paths.svgPath, '<svg><use data-id="P-101" /></svg>'),
@@ -61,7 +62,7 @@ describe("local DEXPI renderer contract", () => {
 
     const result = await renderDexpiSource({
       sourcePath,
-      outputDir,
+      cacheRoot,
       rendererPath: join(root, "spike.py"),
       execFile: async () => {
         throw new Error("the renderer must not run for a cache hit");
