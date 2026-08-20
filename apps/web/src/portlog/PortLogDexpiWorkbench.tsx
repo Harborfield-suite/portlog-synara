@@ -1,3 +1,4 @@
+import { isWorkspaceRelativePathSafe, joinWorkspaceRelativePath } from "@synara/shared/path";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DesktopDexpiImportInput, DesktopDexpiImportResult } from "@synara/contracts";
 
@@ -14,6 +15,18 @@ export function PortLogDexpiWorkbench(props: {
   const [status, setStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const browserSvgPath = useMemo(() => {
+    if (
+      !props.sourceCwd ||
+      !props.sourcePath ||
+      !isWorkspaceRelativePathSafe(props.sourcePath) ||
+      !/\.xml$/iu.test(props.sourcePath)
+    ) {
+      return null;
+    }
+    return joinWorkspaceRelativePath(props.sourceCwd, props.sourcePath.replace(/\.xml$/iu, ".svg"));
+  }, [props.sourceCwd, props.sourcePath]);
+  const hasDesktopRenderer = typeof window !== "undefined" && Boolean(window.desktopBridge?.dexpi);
 
   const importSource = useCallback(async (input?: DesktopDexpiImportInput) => {
     const bridge = window.desktopBridge?.dexpi;
@@ -68,6 +81,8 @@ export function PortLogDexpiWorkbench(props: {
           selectedEntityId={selectedEntityId}
           onEntitySelect={setSelectedEntityId}
         />
+      ) : !hasDesktopRenderer && browserSvgPath ? (
+        <PortLogSvgPreview svgPath={browserSvgPath} onEntitySelect={setSelectedEntityId} />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           Import a DEXPI XML drawing to open its source-faithful SVG representation.

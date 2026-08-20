@@ -158,7 +158,7 @@ export function PortLogSvgPreview(props: {
           onClick={handleClick}
         >
           <div
-            className="origin-top-left"
+            className="h-full w-full origin-top-left [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
             data-testid="portlog-svg-canvas"
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
             dangerouslySetInnerHTML={{ __html: markup }}
