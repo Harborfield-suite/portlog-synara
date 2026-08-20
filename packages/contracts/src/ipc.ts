@@ -489,6 +489,11 @@ export interface SynaraStorageSnapshot {
   readonly entries: Readonly<Record<string, string>>;
 }
 
+export interface DesktopDexpiImportInput {
+  readonly sourcePath?: string;
+  readonly cwd?: string;
+}
+
 export interface DesktopDexpiImportResult {
   readonly sourcePath: string;
   readonly sourceFilename: string;
@@ -565,7 +570,7 @@ export interface DesktopBridge {
     acknowledgeSnapshot: () => Promise<void>;
   };
   dexpi: {
-    importSource: () => Promise<DesktopDexpiImportResult | null>;
+    importSource: (input?: DesktopDexpiImportInput) => Promise<DesktopDexpiImportResult | null>;
   };
   server?: {
     transcribeVoice: (

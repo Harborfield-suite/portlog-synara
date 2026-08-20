@@ -643,7 +643,10 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
             </div>
             {props.centerMode === "drawing" ? (
               <div className="flex min-h-0 min-w-0 flex-1">
-                <PortLogDexpiWorkbench />
+                <PortLogDexpiWorkbench
+                  sourcePath={props.selectedFilePath}
+                  sourceCwd={props.workspaceRoot}
+                />
               </div>
             ) : null}
             {props.centerMode === "file" ? (

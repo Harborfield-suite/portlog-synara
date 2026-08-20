@@ -1,17 +1,21 @@
-import { useMemo, useState } from "react";
-import type { DesktopDexpiImportResult } from "@synara/contracts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DesktopDexpiImportInput, DesktopDexpiImportResult } from "@synara/contracts";
 
 import { PortLogEntityInspector, parsePortLogDexpiEntities } from "./PortLogEntityInspector";
 import { PortLogSvgPreview } from "./PortLogSvgPreview";
+import { isPortLogPrimaryDrawingPath } from "./portlogWorkspaceArtifacts";
 import { usePortLogLocalFile } from "./usePortLogLocalFile";
 
-export function PortLogDexpiWorkbench() {
+export function PortLogDexpiWorkbench(props: {
+  sourcePath?: string | null;
+  sourceCwd?: string | null;
+}) {
   const [artifact, setArtifact] = useState<DesktopDexpiImportResult | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
-  const importSource = async () => {
+  const importSource = useCallback(async (input?: DesktopDexpiImportInput) => {
     const bridge = window.desktopBridge?.dexpi;
     if (!bridge) {
       setStatus("DEXPI import is available in the desktop app.");
@@ -20,7 +24,7 @@ export function PortLogDexpiWorkbench() {
     setImporting(true);
     setStatus(null);
     try {
-      const nextArtifact = await bridge.importSource();
+      const nextArtifact = await bridge.importSource(input);
       if (nextArtifact) {
         setArtifact(nextArtifact);
         setSelectedEntityId(null);
@@ -31,7 +35,17 @@ export function PortLogDexpiWorkbench() {
     } finally {
       setImporting(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!props.sourcePath || !isPortLogPrimaryDrawingPath(props.sourcePath)) return;
+    setArtifact(null);
+    const input: DesktopDexpiImportInput = {
+      sourcePath: props.sourcePath,
+      ...(props.sourceCwd ? { cwd: props.sourceCwd } : {}),
+    };
+    void importSource(input);
+  }, [importSource, props.sourceCwd, props.sourcePath]);
 
   return (
     <div

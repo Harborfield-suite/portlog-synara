@@ -16,10 +16,8 @@ export type PortLogWorkspaceArtifact = {
   badge: string | null;
 };
 
-const PREPARED_NAME_RE =
-  /(?:^|\/)(?:artifacts?|prepared|topology|facts|scene)(?:\/|$)/i;
-const PREPARED_FILE_RE =
-  /\.(?:facts\.json|topology\.json|scene\.json|pid\.json)$/i;
+const PREPARED_NAME_RE = /(?:^|\/)(?:artifacts?|prepared|topology|facts|scene)(?:\/|$)/i;
+const PREPARED_FILE_RE = /\.(?:facts\.json|topology\.json|scene\.json|pid\.json)$/i;
 
 function normalizePath(pathValue: string): string {
   return pathValue.replace(/\\/g, "/");
@@ -52,6 +50,10 @@ export function classifyPortLogWorkspaceArtifact(pathValue: string): PortLogWork
 
 export function isPortLogPrimaryDrawingPath(pathValue: string): boolean {
   return classifyPortLogWorkspaceArtifact(pathValue).kind === "dexpi-source";
+}
+
+export function resolvePortLogEditorCenterMode(pathValue: string): "file" | "drawing" {
+  return isPortLogPrimaryDrawingPath(pathValue) ? "drawing" : "file";
 }
 
 /** Stable sort key: DEXPI and PortLog project files rise above ordinary noise. */

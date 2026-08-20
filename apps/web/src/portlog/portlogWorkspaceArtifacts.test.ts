@@ -4,6 +4,7 @@ import {
   classifyPortLogWorkspaceArtifact,
   isPortLogPrimaryDrawingPath,
   portLogArtifactSortRank,
+  resolvePortLogEditorCenterMode,
 } from "./portlogWorkspaceArtifacts";
 
 describe("classifyPortLogWorkspaceArtifact", () => {
@@ -13,6 +14,8 @@ describe("classifyPortLogWorkspaceArtifact", () => {
       badge: "DEXPI",
     });
     expect(isPortLogPrimaryDrawingPath("C01-shelf.XML")).toBe(true);
+    expect(resolvePortLogEditorCenterMode("C01-shelf.XML")).toBe("drawing");
+    expect(resolvePortLogEditorCenterMode("README.md")).toBe("file");
   });
 
   it("marks the PortLog project manifest", () => {

@@ -108,6 +108,7 @@ import {
   stripEditorViewSearchParams,
 } from "../../routes/-chatThreadRoute.logic";
 import { cn } from "~/lib/utils";
+import { resolvePortLogEditorCenterMode } from "../../portlog/portlogWorkspaceArtifacts";
 
 const PullRequestDockPane = lazy(() => import("../pullRequest/PullRequestDockPane"));
 const EditorWorkspaceView = lazy(() =>
@@ -238,7 +239,7 @@ export function SingleChatSurface(props: {
   );
   const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff" | "drawing">(() =>
     props.search.editorFilePath
-      ? "file"
+      ? resolvePortLogEditorCenterMode(props.search.editorFilePath)
       : (readEditorViewState(props.threadId)?.centerMode ?? "diff"),
   );
   // This route component is reused across thread navigations; reload the
@@ -255,7 +256,11 @@ export function SingleChatSurface(props: {
     // elsewhere, so deriving here would mean stamping the thread key in every one.
     const timer = window.setTimeout(() => {
       setEditorExpandedDirectories(new Set(persisted?.expandedDirectories ?? []));
-      setEditorCenterMode(props.search.editorFilePath ? "file" : (persisted?.centerMode ?? "diff"));
+      setEditorCenterMode(
+        props.search.editorFilePath
+          ? resolvePortLogEditorCenterMode(props.search.editorFilePath)
+          : (persisted?.centerMode ?? "diff"),
+      );
     }, 0);
     return () => window.clearTimeout(timer);
   }, [props.search.editorFilePath, props.threadId]);
@@ -348,7 +353,7 @@ export function SingleChatSurface(props: {
   };
 
   const handleSelectEditorFile = (filePath: string) => {
-    setEditorCenterMode("file");
+    setEditorCenterMode(resolvePortLogEditorCenterMode(filePath));
     void navigate({
       to: "/$threadId",
       params: { threadId: props.threadId },
@@ -923,6 +928,36 @@ export function SingleChatSurface(props: {
     hasOpenedPanel: true,
     lastOpenPanel: "browser",
   };
+
+  if (props.search.view === "model") {
+    return (
+      <WorkspaceFileOpenerContext.Provider value={dockFileOpener}>
+        <div
+          className={cn(
+            CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
+            CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME,
+            "chat-pane-enter",
+          )}
+        >
+          <RouteInsetSurface surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}>
+            <DeferredChatView
+              threadId={props.threadId}
+              paneScopeId={SINGLE_CHAT_PANE_SCOPE_ID}
+              deferMount={false}
+              surfaceMode="single"
+              presentationMode="model"
+              isFocusedPane
+              panelState={chatPanelState}
+              onToggleDiff={noopChatSurfaceAction}
+              onToggleBrowser={noopChatSurfaceAction}
+              onOpenBrowserUrl={noopChatSurfaceAction}
+              onOpenTurnDiff={noopChatSurfaceAction}
+            />
+          </RouteInsetSurface>
+        </div>
+      </WorkspaceFileOpenerContext.Provider>
+    );
+  }
 
   if (props.search.view === "editor") {
     return (

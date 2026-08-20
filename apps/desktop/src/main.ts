@@ -37,6 +37,7 @@ import type {
 } from "electron";
 import * as Effect from "effect/Effect";
 import type {
+  DesktopDexpiImportInput,
   DesktopTheme,
   DesktopUpdateActionResult,
   DesktopUpdateState,
@@ -3529,21 +3530,27 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.removeHandler(IPC.dexpiImportSource);
-  ipcMain.handle(IPC.dexpiImportSource, async () => {
+  ipcMain.handle(IPC.dexpiImportSource, async (_event, input?: DesktopDexpiImportInput) => {
+    const requestedPath = input?.sourcePath?.trim();
+    const selectedPath = requestedPath
+      ? Path.resolve(input?.cwd?.trim() || BASE_DIR, requestedPath)
+      : null;
     const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
-    const result = owner
-      ? await dialog.showOpenDialog(owner, {
-          properties: ["openFile"],
-          filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
-        })
-      : await dialog.showOpenDialog({
-          properties: ["openFile"],
-          filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
-        });
-    if (result.canceled) return null;
+    const result = selectedPath
+      ? null
+      : owner
+        ? await dialog.showOpenDialog(owner, {
+            properties: ["openFile"],
+            filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+          })
+        : await dialog.showOpenDialog({
+            properties: ["openFile"],
+            filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+          });
+    if (result?.canceled) return null;
 
-    const selectedPath = result.filePaths[0];
-    if (!selectedPath || Path.extname(selectedPath).toLowerCase() !== ".xml") {
+    const resolvedPath = selectedPath ?? result?.filePaths[0];
+    if (!resolvedPath || Path.extname(resolvedPath).toLowerCase() !== ".xml") {
       throw new Error("Select a DEXPI XML source file.");
     }
 
@@ -3555,13 +3562,13 @@ function registerIpcHandlers(): void {
     }
 
     const artifact = await renderDexpiSource({
-      sourcePath: selectedPath,
+      sourcePath: resolvedPath,
       cacheRoot: Path.join(BASE_DIR, "artifacts", "dexpi"),
       rendererPath,
     });
     return {
-      sourcePath: Path.resolve(selectedPath),
-      sourceFilename: Path.basename(selectedPath),
+      sourcePath: Path.resolve(resolvedPath),
+      sourceFilename: Path.basename(resolvedPath),
       sourceSha256: artifact.sourceSha256,
       svgPath: artifact.svgPath,
       scenePath: artifact.scenePath,
