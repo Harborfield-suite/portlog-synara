@@ -2,21 +2,53 @@ import { spawn } from "node:child_process";
 
 import { buildCursorAgentCommand } from "../provider/acp/CursorAcpCommand.ts";
 
-export type ByokOAuthProvider = "openai-codex" | "cursor";
+export type ByokOAuthProvider =
+  | "openai-codex"
+  | "anthropic"
+  | "cursor"
+  | "google-antigravity"
+  | "xai-oauth"
+  | "droid"
+  | "kilo"
+  | "opencode";
 
 type OAuthCommand = {
   readonly executable: string;
   readonly args: readonly string[];
+  readonly background?: boolean;
 };
 
-const COMMANDS: Readonly<Record<ByokOAuthProvider, { login: OAuthCommand; logout: OAuthCommand }>> = {
+type OAuthCommands = {
+  readonly login: OAuthCommand;
+  readonly logout?: OAuthCommand;
+};
+
+const COMMANDS: Readonly<Record<ByokOAuthProvider, OAuthCommands>> = {
   "openai-codex": {
     login: { executable: "codex", args: ["login"] },
     logout: { executable: "codex", args: ["logout"] },
   },
+  anthropic: {
+    login: { executable: "claude", args: [], background: true },
+  },
   cursor: {
     login: { executable: "cursor-agent", args: ["login"] },
     logout: { executable: "cursor-agent", args: ["logout"] },
+  },
+  "google-antigravity": {
+    login: { executable: "agy", args: [], background: true },
+  },
+  "xai-oauth": {
+    login: { executable: "grok", args: ["login", "--oauth"] },
+  },
+  droid: {
+    login: { executable: "droid", args: [], background: true },
+  },
+  kilo: {
+    login: { executable: "kilo", args: ["auth", "login"] },
+  },
+  opencode: {
+    login: { executable: "opencode", args: ["auth", "login"] },
   },
 };
 
@@ -43,10 +75,15 @@ export function resolveByokOAuthCommand(
     return {
       executable: executableOverride?.trim() || command.executable,
       args: [...command.args],
+      ...(command.background ? { background: true } : {}),
     };
   }
   const resolved = buildCursorAgentCommand(executableOverride || command.executable, command.args);
-  return { executable: resolved.command, args: [...resolved.args] };
+  return {
+    executable: resolved.command,
+    args: [...resolved.args],
+    ...(command.background ? { background: true } : {}),
+  };
 }
 
 export function oauthExecutableMissingMessage(provider: string, executable: string): string {
@@ -68,6 +105,7 @@ export function launchByokOAuth(
   return new Promise((resolve, reject) => {
     const child = spawn(launchCommand.executable, [...launchCommand.args], {
       stdio: "ignore",
+      detached: launchCommand.background === true,
       windowsHide: true,
     });
     let settled = false;
@@ -79,6 +117,15 @@ export function launchByokOAuth(
           : error,
       );
     });
+    if (launchCommand.background === true) {
+      child.once("spawn", () => {
+        if (settled) return;
+        child.unref();
+        settled = true;
+        resolve(launchCommand);
+      });
+      return;
+    }
     child.once("close", (code, signal) => {
       if (settled) return;
       if (code === 0) {

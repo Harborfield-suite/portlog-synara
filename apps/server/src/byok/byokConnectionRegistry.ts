@@ -55,7 +55,7 @@ export type ByokProviderConnectionSnapshot = {
 };
 
 export function catalogueEntriesForConnectionList() {
-  // byokProviderIndex already leads with the full OMP-aligned PortLog face.
+  // byokProviderIndex exposes the curated OMP-backed PortLog face.
   return byokProviderIndex();
 }
 

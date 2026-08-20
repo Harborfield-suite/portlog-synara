@@ -517,6 +517,38 @@ describe("applyCursorAcpModelSelection", () => {
     expect(calls).toEqual([{ type: "model", value: "default[]" }]);
   });
 
+  it("uses Cursor's ACP default id when a resumed session omits config options", async () => {
+    const calls: Array<
+      | { readonly type: "model"; readonly value: string }
+      | { readonly type: "config"; readonly configId: string; readonly value: string | boolean }
+    > = [];
+
+    const runtime = {
+      // Cursor session/load may omit configOptions even though session/set_config_option
+      // still accepts the standard model id.
+      getConfigOptions: Effect.succeed([]),
+      setModel: (value: string) =>
+        Effect.sync(() => {
+          calls.push({ type: "model", value });
+        }),
+      setConfigOption: (configId: string, value: string | boolean) =>
+        Effect.sync(() => {
+          calls.push({ type: "config", configId, value });
+        }),
+    };
+
+    await Effect.runPromise(
+      applyCursorAcpModelSelection({
+        runtime,
+        model: "auto",
+        options: undefined,
+        mapError: ({ cause }) => cause,
+      }),
+    );
+
+    expect(calls).toEqual([{ type: "model", value: "default" }]);
+  });
+
   it("maps legacy Cursor base slugs to parameterized ACP model values", async () => {
     const calls: Array<
       | { readonly type: "model"; readonly value: string }

@@ -26,6 +26,8 @@ import {
   type OrchestrationThreadStreamItem,
   type ServerConfigStreamEvent,
   type ServerDiagnosticsResult,
+  type ServerByokOAuthProvider,
+  type ServerSettings,
   type ServerLifecycleStreamEvent,
 } from "@synara/contracts";
 import { clamp } from "effect/Number";
@@ -163,6 +165,30 @@ import {
   GitHubProjectProvisioningError,
   makeGitHubProjectProvisioner,
 } from "./project/githubProjectProvisioning";
+
+function providerOAuthExecutable(
+  settings: ServerSettings,
+  provider: ServerByokOAuthProvider,
+): string | undefined {
+  switch (provider) {
+    case "openai-codex":
+      return settings.providers.codex.binaryPath;
+    case "anthropic":
+      return settings.providers.claudeAgent.binaryPath;
+    case "cursor":
+      return settings.providers.cursor.binaryPath;
+    case "google-antigravity":
+      return settings.providers.antigravity.binaryPath;
+    case "xai-oauth":
+      return settings.providers.grok.binaryPath;
+    case "droid":
+      return settings.providers.droid.binaryPath;
+    case "kilo":
+      return settings.providers.kilo.binaryPath;
+    case "opencode":
+      return settings.providers.opencode.binaryPath;
+  }
+}
 
 export function canManageExternalMcp(role: "owner" | "client"): boolean {
   return role === "owner";
@@ -1645,15 +1671,16 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(
             Effect.gen(function* () {
               const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
-              const executable =
-                input.provider === "openai-codex"
-                  ? settings.providers.codex.binaryPath
-                  : settings.providers.cursor.binaryPath;
+              const executable = providerOAuthExecutable(settings, input.provider);
               const command = yield* Effect.promise(() =>
                 launchByokOAuth(input.provider, "login", executable),
               );
               yield* providerHealth.refresh;
-              return { provider: input.provider, ...command, args: [...command.args] };
+              return {
+                provider: input.provider,
+                executable: command.executable,
+                args: [...command.args],
+              };
             }),
             "Failed to complete BYOK OAuth login",
           ),
@@ -1661,17 +1688,18 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(
             Effect.gen(function* () {
               const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
-              const executable =
-                input.provider === "openai-codex"
-                  ? settings.providers.codex.binaryPath
-                  : settings.providers.cursor.binaryPath;
+              const executable = providerOAuthExecutable(settings, input.provider);
               const command = yield* Effect.promise(() =>
                 launchByokOAuth(input.provider, "logout", executable),
               );
               clearByokOauthConnected(input.provider);
               clearByokProbe(input.provider);
               yield* providerHealth.refresh;
-              return { provider: input.provider, ...command, args: [...command.args] };
+              return {
+                provider: input.provider,
+                executable: command.executable,
+                args: [...command.args],
+              };
             }),
             "Failed to complete BYOK OAuth logout",
           ),

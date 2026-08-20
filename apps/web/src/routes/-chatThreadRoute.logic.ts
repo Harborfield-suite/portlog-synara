@@ -3,7 +3,13 @@
 // Layer: Route UI logic helpers.
 // Exports: thread title fallback, deep-link bootstrap replay handling, and panel toggle helpers.
 
-import type { ProjectId, ThreadEnvironmentMode, ThreadId, TurnId } from "@synara/contracts";
+import type {
+  ProjectId,
+  ProjectKind,
+  ThreadEnvironmentMode,
+  ThreadId,
+  TurnId,
+} from "@synara/contracts";
 import { resolveThreadWorkspaceCwd } from "@synara/shared/threadEnvironment";
 
 import type { ChatRightPanel, DiffRouteSearch } from "../diffRouteSearch";
@@ -70,6 +76,13 @@ export function resolveSingleProjectId(input: {
   draftProjectId: ProjectId | null;
 }): ProjectId | null {
   return input.threadProjectId ?? input.draftProjectId ?? null;
+}
+
+export function shouldRenderProjectEditorView(input: {
+  view: DiffRouteSearch["view"];
+  projectKind: ProjectKind | null | undefined;
+}): boolean {
+  return input.view === "editor" || (input.view === undefined && input.projectKind === "project");
 }
 
 export function normalizeSingleSearchFromPane(

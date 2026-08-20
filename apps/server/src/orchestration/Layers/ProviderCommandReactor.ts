@@ -1274,10 +1274,13 @@ const make = Effect.gen(function* () {
         hasResumeCursor: resumeCursor !== undefined,
       });
       const restartedSession = yield* startProviderSession(resumeCursor);
-      if (
+      if (providerChanged) {
+        // Provider sessions cannot share native history. Give the replacement
+        // provider the retained transcript on its first turn.
+        freshSessionContextBootstrapThreadIds.add(threadId);
+      } else if (
         shouldRegisterContextBootstrap &&
         currentProvider === "droid" &&
-        !providerChanged &&
         resumeCursor === undefined
       ) {
         freshSessionContextBootstrapThreadIds.add(threadId);

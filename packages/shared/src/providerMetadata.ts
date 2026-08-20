@@ -113,6 +113,20 @@ export const PROVIDER_DESCRIPTOR_BY_KIND = Object.fromEntries(
   PROVIDER_DESCRIPTORS.map((descriptor) => [descriptor.kind, descriptor]),
 ) as Record<ProviderKind, (typeof PROVIDER_DESCRIPTORS)[number]>;
 
+const OAUTH_SETUP_PROVIDERS: ReadonlySet<ProviderKind> = new Set([
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "antigravity",
+  "grok",
+  "droid",
+  "kilo",
+  "opencode",
+]);
+
+export const providerSupportsOAuthSetup = (kind: ProviderKind): boolean =>
+  OAUTH_SETUP_PROVIDERS.has(kind);
+
 // Accepts plain strings so projection-sourced provider names can be checked
 // without casts; unknown providers are simply not steerable.
 export const providerSupportsNativeTurnSteering = (kind: string): boolean =>

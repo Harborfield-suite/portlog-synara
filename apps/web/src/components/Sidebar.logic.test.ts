@@ -6,6 +6,7 @@ import {
   derivePinnedProjectIdsForSidebar,
   derivePinnedThreadIdsForSidebar,
   deriveSidebarProjectData,
+  deriveSidebarProjectStatusById,
   describeAddProjectError,
   extractDuplicateProjectCreateProjectId,
   findDeepestWorkspaceRootMatch,
@@ -1829,6 +1830,72 @@ describe("deriveSidebarProjectData", () => {
     });
 
     expect(data.get(project.id)?.projectStatus).toBeNull();
+  });
+
+  it("reuses precomputed status across expansion-only project derivation", () => {
+    const collapsedProject = makeProject({ expanded: false });
+    const expandedProject = { ...collapsedProject, expanded: true };
+    const thread = makeSidebarThreadSummary();
+    const sortedSidebarThreadsByProjectId = groupSidebarThreadsByProjectId([thread]);
+    const precomputedStatus: ThreadStatusPill = {
+      label: "Working",
+      colorClass: "text-sky-600 dark:text-sky-300/80",
+      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      pulse: true,
+      dismissible: false,
+    };
+    const projectStatusById = new Map([[collapsedProject.id, precomputedStatus]]);
+    let statusResolverCalls = 0;
+    const derive = (project: Project) =>
+      deriveSidebarProjectData({
+        projects: [project],
+        sortedSidebarThreadsByProjectId,
+        pinnedThreadIds: [],
+        threadListExtraPagesByProjectCwd: new Map(),
+        normalizeProjectCwd: (cwd) => cwd,
+        activeSidebarThreadId: undefined,
+        previewLimit: 5,
+        previewPageSize: 5,
+        projectStatusById,
+        resolveThreadStatus: () => {
+          statusResolverCalls += 1;
+          return null;
+        },
+      });
+
+    const collapsedData = derive(collapsedProject);
+    const expandedData = derive(expandedProject);
+
+    expect(statusResolverCalls).toBe(0);
+    expect(collapsedData.get(collapsedProject.id)?.projectStatus).toEqual(precomputedStatus);
+    expect(expandedData.get(expandedProject.id)?.projectStatus).toEqual(precomputedStatus);
+  });
+
+  it("recomputes precomputed project statuses from changed thread status inputs", () => {
+    const project = makeProject();
+    const idleThread = makeSidebarThreadSummary({ hasLiveTailWork: false });
+    const workingThread = { ...idleThread, hasLiveTailWork: true };
+    const workingStatus: ThreadStatusPill = {
+      label: "Working",
+      colorClass: "text-sky-600 dark:text-sky-300/80",
+      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      pulse: true,
+      dismissible: false,
+    };
+    const resolveThreadStatus = (thread: SidebarThreadSummary) =>
+      thread.hasLiveTailWork ? workingStatus : null;
+
+    const idleStatusByProjectId = deriveSidebarProjectStatusById({
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([idleThread]),
+      resolveThreadStatus,
+    });
+    const workingStatusByProjectId = deriveSidebarProjectStatusById({
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([workingThread]),
+      resolveThreadStatus,
+    });
+
+    expect(idleStatusByProjectId.get(project.id)).toBeNull();
+    expect(workingStatusByProjectId.get(project.id)).toEqual(workingStatus);
   });
 
   it("pages the thread preview five rows at a time and clamps stale paging", () => {

@@ -49,6 +49,16 @@ describe("trustedOrigins", () => {
     ).toBe(true);
   });
 
+  it("accepts localhost and 127.0.0.1 aliases for the configured dev port", () => {
+    expect(
+      isTrustedAppOrigin({
+        origin: "http://localhost:5733",
+        requestOrigin: "http://127.0.0.1:3773",
+        config: { ...config, devUrl: new URL("http://127.0.0.1:5733/") },
+      }),
+    ).toBe(true);
+  });
+
   it("rejects unrelated browser origins but allows non-browser requests without Origin", () => {
     expect(
       isTrustedAppOrigin({

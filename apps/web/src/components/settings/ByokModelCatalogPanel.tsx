@@ -2,6 +2,7 @@ import type {
   ServerByokCatalogGroup,
   ServerByokCatalogGroupModel,
   ServerByokCatalogModel,
+  ServerByokOAuthProvider,
   ServerByokProviderIndexEntry,
 } from "@synara/contracts";
 import { useQuery } from "@tanstack/react-query";
@@ -44,7 +45,20 @@ export function byokCatalogSearchQuery(query: string): string {
   return query.trim();
 }
 
-function isByokOAuthProvider(providerId: string): providerId is "openai-codex" | "cursor" {
+function isByokOAuthProvider(providerId: string): providerId is ServerByokOAuthProvider {
+  return [
+    "openai-codex",
+    "anthropic",
+    "cursor",
+    "google-antigravity",
+    "xai-oauth",
+    "droid",
+    "kilo",
+    "opencode",
+  ].includes(providerId as ServerByokOAuthProvider);
+}
+
+function supportsByokOAuthLogout(providerId: ServerByokOAuthProvider): boolean {
   return providerId === "openai-codex" || providerId === "cursor";
 }
 
@@ -102,7 +116,7 @@ export function ByokModelCatalogPanel(props: {
 
   const runOAuthAction = async (
     action: "login" | "logout",
-    providerId: "openai-codex" | "cursor",
+    providerId: ServerByokOAuthProvider,
   ) => {
     if (busyAction) return;
     setBusyAction(action === "login" ? "oauth-login" : "oauth-logout");
@@ -293,14 +307,16 @@ export function ByokModelCatalogPanel(props: {
                                   >
                                     {busyAction === "oauth-login" ? "Opening login…" : "Log in with OAuth"}
                                   </button>
-                                  <button
-                                    type="button"
-                                    disabled={busyAction !== null || provider.auth !== "oauth"}
-                                    className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                    onClick={() => void runOAuthAction("logout", oauthProvider)}
-                                  >
-                                    {busyAction === "oauth-logout" ? "Logging out…" : "Log out"}
-                                  </button>
+                                  {supportsByokOAuthLogout(oauthProvider) ? (
+                                    <button
+                                      type="button"
+                                      disabled={busyAction !== null || provider.auth !== "oauth"}
+                                      className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                      onClick={() => void runOAuthAction("logout", oauthProvider)}
+                                    >
+                                      {busyAction === "oauth-logout" ? "Logging out…" : "Log out"}
+                                    </button>
+                                  ) : null}
                                 </>
                               ) : null}
                             </div>

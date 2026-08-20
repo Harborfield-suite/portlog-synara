@@ -103,7 +103,7 @@ export function DeferredChatView(props: {
   paneScopeId: string;
   deferMount: boolean;
   surfaceMode: "single" | "split";
-  presentationMode?: "default" | "editor";
+  presentationMode?: "default" | "editor" | "model";
   isFocusedPane: boolean;
   panelState: SplitViewPanePanelState;
   onToggleDiff: () => void;

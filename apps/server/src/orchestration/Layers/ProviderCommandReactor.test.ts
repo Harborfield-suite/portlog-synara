@@ -6218,6 +6218,61 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
+  it("restarts the provider and bootstraps prior transcript context when switching providers", async () => {
+    const harness = await createHarness({
+      threadModelSelection: { provider: "codex", model: "gpt-5.5" },
+    });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-provider-switch-first-turn"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-switch-first"),
+          role: "user",
+          text: "Remember this context.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    harness.startSession.mockClear();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-provider-switch-second-turn"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-switch-second"),
+          role: "user",
+          text: "Continue with it.",
+          attachments: [],
+        },
+        modelSelection: { provider: "cursor", model: "auto" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      provider: "cursor",
+      modelSelection: { provider: "cursor", model: "auto" },
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      modelSelection: { provider: "cursor", model: "auto" },
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]?.input).toContain("Remember this context.");
+  });
+
   it("restarts an idle Claude session only for spawn-fixed model selection changes", async () => {
     const harness = await createHarness({
       threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-7" },

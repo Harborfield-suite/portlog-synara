@@ -5,6 +5,7 @@
 import {
   PROVIDER_DISPLAY_NAMES,
   type ProviderKind,
+  type ServerByokOAuthProvider,
   type ServerProviderStatus,
   type ServerSettings,
 } from "@synara/contracts";
@@ -127,14 +128,35 @@ type ProviderInstallSettings = {
   readonly fields: readonly ProviderInstallField[];
 };
 
-type NativeOAuthProvider = "openai-codex" | "cursor";
+type NativeOAuthProvider = ServerByokOAuthProvider;
 
 export function nativeOAuthProviderForProviderKind(
   provider: ProviderKind,
 ): NativeOAuthProvider | null {
-  if (provider === "codex") return "openai-codex";
-  if (provider === "cursor") return "cursor";
-  return null;
+  switch (provider) {
+    case "codex":
+      return "openai-codex";
+    case "claudeAgent":
+      return "anthropic";
+    case "cursor":
+      return "cursor";
+    case "antigravity":
+      return "google-antigravity";
+    case "grok":
+      return "xai-oauth";
+    case "droid":
+      return "droid";
+    case "kilo":
+      return "kilo";
+    case "opencode":
+      return "opencode";
+    default:
+      return null;
+  }
+}
+
+function supportsOAuthLogout(provider: NativeOAuthProvider): boolean {
+  return provider === "openai-codex" || provider === "cursor";
 }
 
 const PROVIDER_VISIBILITY_OPTIONS: ReadonlyArray<{ provider: ProviderKind; title: string }> =
@@ -809,15 +831,17 @@ function ProviderToolRow(props: {
                     >
                       {oauthBusy ? "Waiting…" : "Log in with OAuth"}
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={props.oauthBusyProvider !== null || !oauthConnected}
-                      onClick={() => props.onOAuthAction(oauthProvider, "logout")}
-                    >
-                      {oauthBusy ? "Waiting…" : "Log out"}
-                    </Button>
+                    {supportsOAuthLogout(oauthProvider) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={props.oauthBusyProvider !== null || !oauthConnected}
+                        onClick={() => props.onOAuthAction(oauthProvider, "logout")}
+                      >
+                        {oauthBusy ? "Waiting…" : "Log out"}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

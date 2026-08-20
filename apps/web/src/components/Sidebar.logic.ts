@@ -1464,6 +1464,36 @@ export function groupSidebarThreadsByProjectId(
   return byProjectId;
 }
 
+export type SidebarProjectStatusById = ReadonlyMap<ProjectId, ThreadStatusPill | null>;
+
+// Resolves project status once per sidebar-thread input change so presentation-only
+// project changes, such as disclosure expansion, can reuse the result.
+export function deriveSidebarProjectStatusById(input: {
+  sortedSidebarThreadsByProjectId: ReadonlyMap<ProjectId, SidebarThreadSummary[]>;
+  resolveThreadStatus?: (thread: SidebarThreadSummary) => ThreadStatusPill | null;
+}): SidebarProjectStatusById {
+  const byProjectId = new Map<ProjectId, ThreadStatusPill | null>();
+
+  for (const [projectId, projectThreads] of input.sortedSidebarThreadsByProjectId) {
+    byProjectId.set(
+      projectId,
+      resolveProjectStatusIndicator(
+        projectThreads.map((thread) =>
+          input.resolveThreadStatus
+            ? input.resolveThreadStatus(thread)
+            : resolveThreadStatusPill({
+                thread,
+                hasPendingApprovals: thread.hasPendingApprovals,
+                hasPendingUserInput: thread.hasPendingUserInput,
+              }),
+        ),
+      ),
+    );
+  }
+
+  return byProjectId;
+}
+
 export function partitionSidebarThreadsByProjectIds<
   T extends Pick<SidebarThreadSummary, "projectId">,
 >(
@@ -1489,32 +1519,33 @@ export function partitionSidebarThreadsByProjectIds<
 export function deriveSidebarProjectData(input: {
   projects: readonly Pick<Project, "id" | "cwd" | "expanded">[];
   sortedSidebarThreadsByProjectId: ReadonlyMap<ProjectId, SidebarThreadSummary[]>;
+  projectStatusById?: SidebarProjectStatusById;
   pinnedThreadIds: readonly ThreadId[];
   threadListExtraPagesByProjectCwd: ReadonlyMap<string, number>;
   normalizeProjectCwd: (cwd: string) => string;
   activeSidebarThreadId: ThreadId | undefined;
   previewLimit: number;
   previewPageSize: number;
-  resolveThreadStatus?: (
-    thread: SidebarThreadSummary,
-  ) => ReturnType<typeof resolveThreadStatusPill>;
+  resolveThreadStatus?: (thread: SidebarThreadSummary) => ThreadStatusPill | null;
 }): ReadonlyMap<ProjectId, SidebarDerivedProjectData> {
   const byProjectId = new Map<ProjectId, SidebarDerivedProjectData>();
 
   for (const project of input.projects) {
     const allProjectThreads = input.sortedSidebarThreadsByProjectId.get(project.id) ?? [];
     const projectThreads = getUnpinnedThreadsForSidebar(allProjectThreads, input.pinnedThreadIds);
-    const projectStatus = resolveProjectStatusIndicator(
-      allProjectThreads.map((thread) =>
-        input.resolveThreadStatus
-          ? input.resolveThreadStatus(thread)
-          : resolveThreadStatusPill({
-              thread,
-              hasPendingApprovals: thread.hasPendingApprovals,
-              hasPendingUserInput: thread.hasPendingUserInput,
-            }),
-      ),
-    );
+    const projectStatus = input.projectStatusById?.has(project.id)
+      ? (input.projectStatusById.get(project.id) ?? null)
+      : resolveProjectStatusIndicator(
+          allProjectThreads.map((thread) =>
+            input.resolveThreadStatus
+              ? input.resolveThreadStatus(thread)
+              : resolveThreadStatusPill({
+                  thread,
+                  hasPendingApprovals: thread.hasPendingApprovals,
+                  hasPendingUserInput: thread.hasPendingUserInput,
+                }),
+          ),
+        );
     const requestedExtraPages =
       input.threadListExtraPagesByProjectCwd.get(input.normalizeProjectCwd(project.cwd)) ?? 0;
     const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);

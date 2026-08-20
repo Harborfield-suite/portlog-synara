@@ -105,6 +105,7 @@ import {
   collectParentDirectoryPaths,
   resolveFilePreviewWorkspaceRoot,
   resolveRoutePanelBootstrap,
+  shouldRenderProjectEditorView,
   stripEditorViewSearchParams,
 } from "../../routes/-chatThreadRoute.logic";
 import { cn } from "~/lib/utils";
@@ -263,7 +264,24 @@ export function SingleChatSurface(props: {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [props.search.editorFilePath, props.threadId]);
-  const editorViewActive = props.search.view === "editor";
+  const editorViewActive = shouldRenderProjectEditorView({
+    view: props.search.view,
+    projectKind: activeProject?.kind,
+  });
+  useEffect(() => {
+    if (props.search.view !== undefined || activeProject?.kind !== "project") {
+      return;
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: props.threadId },
+      replace: true,
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        view: "editor",
+      }),
+    });
+  }, [activeProject?.kind, navigate, props.search.view, props.threadId]);
   useEffect(() => {
     if (!editorViewActive) {
       return;
@@ -347,7 +365,10 @@ export function SingleChatSurface(props: {
     void navigate({
       to: "/$threadId",
       params: { threadId: props.threadId },
-      search: (previous) => stripEditorViewSearchParams(stripDiffSearchParams(previous)),
+      search: (previous) => ({
+        ...stripEditorViewSearchParams(stripDiffSearchParams(previous)),
+        view: "chat",
+      }),
     });
   };
 
@@ -973,7 +994,7 @@ export function SingleChatSurface(props: {
     );
   }
 
-  if (props.search.view === "editor") {
+  if (editorViewActive) {
     return (
       <WorkspaceFileOpenerContext.Provider value={editorFileOpener}>
         <div

@@ -10,10 +10,24 @@ import {
 describe("BYOK OAuth commands", () => {
   it.each([
     ["openai-codex", "codex", ["login"]],
+    ["anthropic", "claude", []],
     ["cursor", "cursor-agent", ["login"]],
+    ["google-antigravity", "agy", []],
+    ["xai-oauth", "grok", ["login", "--oauth"]],
+    ["droid", "droid", []],
+    ["kilo", "kilo", ["auth", "login"]],
+    ["opencode", "opencode", ["auth", "login"]],
   ] as const)("maps %s to its native login command", (provider, executable, args) => {
-    expect(byokOAuthCommand(provider, "login")).toEqual({ executable, args });
+    expect(byokOAuthCommand(provider, "login")).toMatchObject({ executable, args });
     expect(supportedByokOAuthProvider(provider)).toBe(true);
+  });
+
+  it("preserves background login for interactive provider-owned flows", () => {
+    expect(resolveByokOAuthCommand("anthropic", "login")).toEqual({
+      executable: "claude",
+      args: [],
+      background: true,
+    });
   });
 
   it("resolves Cursor editor overrides to the native agent command", () => {
@@ -41,7 +55,8 @@ describe("BYOK OAuth commands", () => {
       executable: "codex",
       args: ["logout"],
     });
-    expect(byokOAuthCommand("anthropic", "login")).toBeNull();
-    expect(supportedByokOAuthProvider("anthropic")).toBe(false);
+    expect(byokOAuthCommand("anthropic", "logout")).toBeNull();
+    expect(byokOAuthCommand("pi", "login")).toBeNull();
+    expect(supportedByokOAuthProvider("pi")).toBe(false);
   });
 });

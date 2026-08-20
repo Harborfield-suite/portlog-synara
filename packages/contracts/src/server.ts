@@ -560,7 +560,16 @@ export const ServerListByokProvidersResult = Schema.Struct({
 });
 export type ServerListByokProvidersResult = typeof ServerListByokProvidersResult.Type;
 
-export const ServerByokOAuthProvider = Schema.Literals(["openai-codex", "cursor"]);
+export const ServerByokOAuthProvider = Schema.Literals([
+  "openai-codex",
+  "anthropic",
+  "cursor",
+  "google-antigravity",
+  "xai-oauth",
+  "droid",
+  "kilo",
+  "opencode",
+]);
 export type ServerByokOAuthProvider = typeof ServerByokOAuthProvider.Type;
 
 export const ServerStartByokOAuthInput = Schema.Struct({

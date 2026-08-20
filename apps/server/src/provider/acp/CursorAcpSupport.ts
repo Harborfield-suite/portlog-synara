@@ -1339,7 +1339,10 @@ function resolveCursorAcpModelSelection(
   const choices = flattenCursorAcpModelChoices(configOptions);
   if (trimmed === "auto") {
     const autoValue = resolveCursorAutoModelValue(choices);
-    return autoValue ? { _tag: "Resolved", value: autoValue } : { _tag: "None" };
+    // Cursor's session/load response can omit configOptions. The ACP default
+    // id is still valid and prevents the CLI's global model from leaking into
+    // an explicit Synara Auto selection.
+    return { _tag: "Resolved", value: autoValue ?? CURSOR_ACP_AUTO_MODEL_ID };
   }
 
   const exactChoice = choices.find((choice) => choice.slug === trimmed);

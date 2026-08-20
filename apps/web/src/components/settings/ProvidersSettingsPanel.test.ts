@@ -13,8 +13,15 @@ const defaults = AppSettingsSchema.makeUnsafe({});
 describe("nativeOAuthProviderForProviderKind", () => {
   it("maps the native CLI providers to their OAuth identities", () => {
     expect(nativeOAuthProviderForProviderKind("codex")).toBe("openai-codex");
+    expect(nativeOAuthProviderForProviderKind("claudeAgent")).toBe("anthropic");
     expect(nativeOAuthProviderForProviderKind("cursor")).toBe("cursor");
-    expect(nativeOAuthProviderForProviderKind("claudeAgent")).toBeNull();
+    expect(nativeOAuthProviderForProviderKind("antigravity")).toBe("google-antigravity");
+    expect(nativeOAuthProviderForProviderKind("grok")).toBe("xai-oauth");
+    expect(nativeOAuthProviderForProviderKind("droid")).toBe("droid");
+    expect(nativeOAuthProviderForProviderKind("kilo")).toBe("kilo");
+    expect(nativeOAuthProviderForProviderKind("opencode")).toBe("opencode");
+    expect(nativeOAuthProviderForProviderKind("pi")).toBeNull();
+    expect(nativeOAuthProviderForProviderKind("openaiCompatible")).toBeNull();
   });
 });
 

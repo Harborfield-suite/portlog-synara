@@ -7,6 +7,7 @@ import {
   resolveFilePreviewWorkspaceRoot,
   resolveRoutePanelBootstrap,
   resolveSingleProjectId,
+  shouldRenderProjectEditorView,
   resolveSplitPaneCloseDecision,
   resolveSplitPaneMaximizeDecision,
   resolveThreadPickerTitle,
@@ -91,6 +92,15 @@ describe("single chat route helpers", () => {
       }),
     ).toBe(DRAFT_PROJECT_ID);
     expect(resolveSingleProjectId({ threadProjectId: null, draftProjectId: null })).toBeNull();
+  });
+
+  it("opens project threads in the editor by default while preserving an explicit chat view", () => {
+    expect(
+      shouldRenderProjectEditorView({ view: undefined, projectKind: "project" }),
+    ).toBe(true);
+    expect(shouldRenderProjectEditorView({ view: "chat", projectKind: "project" })).toBe(false);
+    expect(shouldRenderProjectEditorView({ view: undefined, projectKind: "chat" })).toBe(false);
+    expect(shouldRenderProjectEditorView({ view: "editor", projectKind: "chat" })).toBe(true);
   });
 
   it("normalizes split pane browser and diff state for single-chat navigation", () => {
