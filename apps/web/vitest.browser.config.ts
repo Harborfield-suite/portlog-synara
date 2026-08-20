@@ -19,6 +19,7 @@ export default mergeConfig(
         "src/components/**/*.browser.tsx",
         "src/lib/**/*.browser.ts",
         "src/lib/**/*.browser.tsx",
+        "src/portlog/**/*.browser.tsx",
       ],
       browser: {
         enabled: true,
