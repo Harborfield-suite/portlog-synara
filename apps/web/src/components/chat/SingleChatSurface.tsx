@@ -108,7 +108,10 @@ import {
   stripEditorViewSearchParams,
 } from "../../routes/-chatThreadRoute.logic";
 import { cn } from "~/lib/utils";
-import { resolvePortLogEditorCenterMode } from "../../portlog/portlogWorkspaceArtifacts";
+import {
+  isPortLogPrimaryDrawingPath,
+  resolvePortLogEditorCenterMode,
+} from "../../portlog/portlogWorkspaceArtifacts";
 
 const PullRequestDockPane = lazy(() => import("../pullRequest/PullRequestDockPane"));
 const EditorWorkspaceView = lazy(() =>
@@ -239,7 +242,7 @@ export function SingleChatSurface(props: {
   );
   const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff" | "drawing">(() =>
     props.search.editorFilePath
-      ? resolvePortLogEditorCenterMode(props.search.editorFilePath)
+      ? "file"
       : (readEditorViewState(props.threadId)?.centerMode ?? "diff"),
   );
   // This route component is reused across thread navigations; reload the
@@ -256,11 +259,7 @@ export function SingleChatSurface(props: {
     // elsewhere, so deriving here would mean stamping the thread key in every one.
     const timer = window.setTimeout(() => {
       setEditorExpandedDirectories(new Set(persisted?.expandedDirectories ?? []));
-      setEditorCenterMode(
-        props.search.editorFilePath
-          ? resolvePortLogEditorCenterMode(props.search.editorFilePath)
-          : (persisted?.centerMode ?? "diff"),
-      );
+      setEditorCenterMode(props.search.editorFilePath ? "file" : (persisted?.centerMode ?? "diff"));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [props.search.editorFilePath, props.threadId]);
@@ -353,6 +352,21 @@ export function SingleChatSurface(props: {
   };
 
   const handleSelectEditorFile = (filePath: string) => {
+    setEditorCenterMode("file");
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: props.threadId },
+      replace: true,
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        view: "editor",
+        editorFilePath: filePath,
+      }),
+    });
+  };
+
+  const handleDoubleClickEditorFile = (filePath: string) => {
+    if (!isPortLogPrimaryDrawingPath(filePath)) return;
     setEditorCenterMode(resolvePortLogEditorCenterMode(filePath));
     void navigate({
       to: "/$threadId",
@@ -980,6 +994,7 @@ export function SingleChatSurface(props: {
               diffOptionsControl={editorDiffOptionsControl}
               onSelectDiffFile={handleSelectEditorDiffFile}
               onSelectFile={handleSelectEditorFile}
+              onDoubleClickFile={handleDoubleClickEditorFile}
               onToggleDirectory={handleToggleEditorDirectory}
               onCenterModeChange={setEditorCenterMode}
               onExitEditorView={handleCloseEditorView}

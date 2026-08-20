@@ -88,6 +88,7 @@ interface EditorWorkspaceViewProps {
   diffPanel: ReactNode;
   chatPanel: ReactNode;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onSelectDiffFile: (path: string) => void;
   onToggleDirectory: (path: string) => void;
   onCenterModeChange: (mode: EditorCenterMode) => void;
@@ -351,7 +352,7 @@ function EditorActivityBar(props: {
         <ChangesIcon className="size-5" />
       </ExplorerActivityBarButton>
       <ExplorerActivityBarButton
-        label="P&ID drawing"
+        label="Process drawing"
         active={drawingActive}
         onClick={() => props.onSelectItem("drawing")}
       >
@@ -612,6 +613,7 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
               onQueryChange={setSearchQuery}
               selectedFilePath={props.selectedFilePath}
               onSelectFile={props.onSelectFile}
+              onDoubleClickFile={props.onDoubleClickFile}
               onReferenceInChat={props.onReferenceInChat}
             />
           ) : props.centerMode === "diff" ? (
@@ -630,6 +632,7 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
               selectedFilePath={props.selectedFilePath}
               expandedDirectories={props.expandedDirectories}
               onSelectFile={props.onSelectFile}
+              onDoubleClickFile={props.onDoubleClickFile}
               onToggleDirectory={props.onToggleDirectory}
               onReferenceInChat={props.onReferenceInChat}
             />

@@ -18,7 +18,9 @@ export function PortLogDexpiWorkbench(props: {
   const importSource = useCallback(async (input?: DesktopDexpiImportInput) => {
     const bridge = window.desktopBridge?.dexpi;
     if (!bridge) {
-      setStatus("DEXPI import is available in the desktop app.");
+      setStatus(
+        "Process drawing rendering is available in the desktop app; raw XML remains available in Files.",
+      );
       return;
     }
     setImporting(true);
@@ -54,9 +56,9 @@ export function PortLogDexpiWorkbench(props: {
       data-testid="portlog-dexpi-workbench"
     >
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border/65 px-3 text-xs text-muted-foreground">
-        <span className="mr-auto">DEXPI workbench</span>
+        <span className="mr-auto">DEXPI process drawing</span>
         <button type="button" onClick={() => void importSource()} disabled={importing}>
-          {importing ? "Importing…" : "Import DEXPI"}
+          {importing ? "Importing…" : "Import process drawing"}
         </button>
         {status ? <span role="status">{status}</span> : null}
       </div>

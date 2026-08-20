@@ -217,7 +217,7 @@ describe("EditorWorkspaceView", () => {
 
     expect(markup).toContain('data-portlog-craft="dexpi-svg"');
     expect(markup).toContain("source-faithful SVG representation");
-    expect(markup).toContain('aria-label="P&amp;ID drawing"');
+    expect(markup).toContain('aria-label="Process drawing"');
   });
 
   it("renders image files through the local image preview instead of text preview", () => {

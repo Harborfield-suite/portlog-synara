@@ -8,7 +8,7 @@ describe("PortLogDexpiWorkbench", () => {
     const markup = renderToStaticMarkup(<PortLogDexpiWorkbench />);
 
     expect(markup).toContain('data-testid="portlog-dexpi-workbench"');
-    expect(markup).toContain("Import DEXPI");
+    expect(markup).toContain("Import process drawing");
     expect(markup).toContain("source-faithful SVG representation");
     expect(markup).not.toContain("P-101");
   });
