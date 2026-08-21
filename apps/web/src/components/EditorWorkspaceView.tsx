@@ -97,6 +97,7 @@ interface EditorWorkspaceViewProps {
   onAskWhyInChat?: (reference: ChatFileReference) => void;
   onCommentInChat?: (comment: FileCommentSelection) => void;
   onSelectProject?: (projectId: ProjectId) => void;
+  onOpenWorkspace?: () => void;
 }
 
 function clampEditorChatPaneWidth(width: number): number {
@@ -561,6 +562,7 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
               projectOptions={props.projectOptions ?? []}
               selectedProjectId={props.currentProjectId ?? null}
               onProjectIdChange={props.onSelectProject}
+              onOpenWorkspace={props.onOpenWorkspace}
               trigger={
                 <ChatHeaderIconButton
                   type="button"

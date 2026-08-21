@@ -10,6 +10,7 @@ import {
   Menu,
   MenuGroup,
   MenuGroupLabel,
+  MenuItem,
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
@@ -37,6 +38,8 @@ export function ProjectMenuPicker(props: {
   projectOptions: ReadonlyArray<ProjectMenuPickerOption>;
   selectedProjectId: ProjectId | null;
   onProjectIdChange: (projectId: ProjectId) => void;
+  /** Optional escape hatch back to the workspace launcher. */
+  onOpenWorkspace?: (() => void) | undefined;
   /** Rendered through MenuTrigger's `render` slot so each surface owns its trigger chrome. */
   trigger: ReactElement;
   /** Content merged into the trigger element (label, chevron, …). */
@@ -62,6 +65,7 @@ export function ProjectMenuPicker(props: {
             projectOptions={props.projectOptions}
             selectedProjectId={props.selectedProjectId}
             onProjectIdChange={props.onProjectIdChange}
+            onOpenWorkspace={props.onOpenWorkspace}
           />
         ) : null}
       </ComposerPickerMenuPopup>
@@ -73,6 +77,7 @@ function ProjectMenuPickerList(props: {
   projectOptions: ReadonlyArray<ProjectMenuPickerOption>;
   selectedProjectId: ProjectId | null;
   onProjectIdChange: (projectId: ProjectId) => void;
+  onOpenWorkspace?: (() => void) | undefined;
 }) {
   const [query, setQuery] = useState("");
   const projects = useStore((state) => state.projects);
@@ -128,6 +133,12 @@ function ProjectMenuPickerList(props: {
       bleedParentPadding
       listMaxHeightClassName="max-h-64"
     >
+      {props.onOpenWorkspace ? (
+        <>
+          <MenuItem onClick={props.onOpenWorkspace}>Workspace home</MenuItem>
+          <MenuSeparator />
+        </>
+      ) : null}
       {groupedOptions.length > 0 ? (
         <MenuRadioGroup
           value={props.selectedProjectId ?? ""}

@@ -102,6 +102,7 @@ export function CreateProjectDialog(props: {
   spaces: ReadonlyArray<Space>;
   activeSpaceId: SpaceId | null;
   defaultCloneParent: string;
+  initialWorkspaceRoot?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: CreateProjectSubmitValue, options: CreateProjectSubmitOptions) => Promise<void>;
 }) {
@@ -150,7 +151,8 @@ export function CreateProjectDialog(props: {
     openedRef.current = props.open;
     if (!props.open) return;
     setSource("local");
-    setPath("");
+    const initialWorkspaceRoot = props.initialWorkspaceRoot?.trim() ?? "";
+    setPath(initialWorkspaceRoot);
     setRepositoryInput("");
     setDestinationParent(props.defaultCloneParent);
     setDirectoryName("");
@@ -158,7 +160,7 @@ export function CreateProjectDialog(props: {
     setProvisionProgress(null);
     submitAbortRef.current = null;
     activeOperationIdRef.current = null;
-    setPickedPath(null);
+    setPickedPath(initialWorkspaceRoot || null);
     setSelectedSpaceKey(spaceKey(props.activeSpaceId));
     setSpaceEditorOpen(false);
     setCreatedSpace(null);
@@ -171,7 +173,13 @@ export function CreateProjectDialog(props: {
     // path field has to happen after that lands or it is immediately undone.
     const frame = requestAnimationFrame(() => document.getElementById(pathInputId)?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [pathInputId, props.activeSpaceId, props.defaultCloneParent, props.open]);
+  }, [
+    pathInputId,
+    props.activeSpaceId,
+    props.defaultCloneParent,
+    props.initialWorkspaceRoot,
+    props.open,
+  ]);
 
   useEffect(() => {
     if (!props.githubProvisioningAvailable && source === "github") {

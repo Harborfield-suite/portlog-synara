@@ -704,6 +704,12 @@ export function SingleChatSurface(props: {
       },
     );
   };
+  const handleOpenWorkspace = () => {
+    void navigate({
+      to: "/",
+      search: () => ({ launcher: true }),
+    });
+  };
   const handleSelectEditorProject = (projectId: ProjectId) => {
     void openEditorProject(projectId).catch((error: unknown) => {
       toastManager.add({
@@ -1023,6 +1029,7 @@ export function SingleChatSurface(props: {
               onAskWhyInChat={handleAskWhyInChat}
               onCommentInChat={handleCommentInChat}
               onSelectProject={handleSelectEditorProject}
+              onOpenWorkspace={handleOpenWorkspace}
               diffPanel={
                 <LazyDiffPanel
                   mode="sidebar"
