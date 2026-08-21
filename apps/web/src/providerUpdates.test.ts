@@ -54,6 +54,7 @@ function serverSettings(overrides: Partial<ServerSettings["providers"]> = {}): S
   };
 
   return {
+    secretProtectionMode: "off",
     enableAssistantStreaming: false,
     enableProviderUpdateChecks: true,
     defaultThreadEnvMode: "local",
@@ -75,6 +76,14 @@ function serverSettings(overrides: Partial<ServerSettings["providers"]> = {}): S
         experimentalWebSockets: false,
       },
       pi: { ...provider, binaryPath: "pi", agentDir: "" },
+      openaiCompatible: {
+        enabled: true,
+        catalogProviderId: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+        defaultModel: "openai/gpt-4o",
+        customModels: [],
+        apiKeyConfigured: false,
+      },
       ...overrides,
     },
     skills: { disabled: [] },

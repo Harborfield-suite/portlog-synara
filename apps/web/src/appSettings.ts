@@ -13,6 +13,7 @@ import {
   DEFAULT_SERVER_SETTINGS_VIEW,
   TrimmedNonEmptyString,
   ProviderKind,
+  SecretProtectionMode,
   type ProviderStartOptions,
   type ServerSettingsView,
   type ServerSettingsPatch,
@@ -116,7 +117,8 @@ type CustomModelSettingsKey =
   | "customDroidModels"
   | "customKiloModels"
   | "customOpenCodeModels"
-  | "customPiModels";
+  | "customPiModels"
+  | "customOpenAICompatibleModels";
 export type ProviderCustomModelConfig = {
   provider: ProviderKind;
   settingsKey: CustomModelSettingsKey;
@@ -137,6 +139,7 @@ const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>
   kilo: new Set(getModelOptions("kilo").map((option) => option.slug)),
   opencode: new Set(getModelOptions("opencode").map((option) => option.slug)),
   pi: new Set(getModelOptions("pi").map((option) => option.slug)),
+  openaiCompatible: new Set(getModelOptions("openaiCompatible").map((option) => option.slug)),
 };
 
 const withDefaults =
@@ -163,6 +166,7 @@ const PersistedProviderKind = Schema.Literals([
   "kilo",
   "opencode",
   "pi",
+  "openaiCompatible",
 ]).pipe(
   Schema.decodeTo(
     ProviderKind,
@@ -174,6 +178,7 @@ const PersistedProviderKind = Schema.Literals([
 );
 
 export const AppSettingsSchema = Schema.Struct({
+  secretProtectionMode: SecretProtectionMode.pipe(withDefaults(() => "off")),
   claudeBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   uiDensity: UiDensity.pipe(withDefaults(() => DEFAULT_UI_DENSITY)),
   chatFontSizePx: Schema.Number.pipe(withDefaults(() => DEFAULT_CHAT_FONT_SIZE_PX)),
@@ -204,6 +209,18 @@ export const AppSettingsSchema = Schema.Struct({
   ),
   openCodeServerPasswordConfigured: Schema.Boolean.pipe(withDefaults(() => false)),
   openCodeExperimentalWebSockets: Schema.Boolean.pipe(withDefaults(() => false)),
+  openaiCompatibleBaseUrl: Schema.String.check(Schema.isMaxLength(4096)).pipe(
+    withDefaults(() => "https://openrouter.ai/api/v1"),
+  ),
+  openaiCompatibleCatalogProviderId: Schema.String.check(Schema.isMaxLength(128)).pipe(
+    withDefaults(() => "openrouter"),
+  ),
+  openaiCompatibleDefaultModel: Schema.String.check(Schema.isMaxLength(256)).pipe(
+    withDefaults(() => "openai/gpt-4o"),
+  ),
+  openaiCompatibleApiKey: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
+  openaiCompatibleApiKeyConfigured: Schema.Boolean.pipe(withDefaults(() => false)),
+  customOpenAICompatibleModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   defaultThreadEnvMode: EnvMode.pipe(withDefaults(() => "local" as const satisfies EnvMode)),
   confirmThreadDelete: Schema.Boolean.pipe(withDefaults(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(withDefaults(() => false)),
@@ -263,10 +280,10 @@ export const AppSettingsSchema = Schema.Struct({
   customKiloModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customOpenCodeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customPiModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
-  textGenerationProvider: PersistedProviderKind.pipe(withDefaults(() => "codex" as const)),
+  textGenerationProvider: PersistedProviderKind.pipe(withDefaults(() => "pi" as const)),
   textGenerationModel: Schema.optional(TrimmedNonEmptyString),
   uiFontFamily: Schema.String.check(Schema.isMaxLength(256)).pipe(withDefaults(() => "")),
-  defaultProvider: PersistedProviderKind.pipe(withDefaults(() => "codex" as const)),
+  defaultProvider: PersistedProviderKind.pipe(withDefaults(() => "pi" as const)),
   // Local-only UI preference: providers explicitly hidden from the composer picker.
   // The active/locked provider for a thread is always shown regardless, so users
   // never get stuck on a thread whose provider they later chose to hide.
@@ -400,6 +417,15 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "provider/model",
     example: "anthropic/claude-sonnet-4-5",
   },
+  openaiCompatible: {
+    provider: "openaiCompatible",
+    settingsKey: "customOpenAICompatibleModels",
+    defaultSettingsKey: "customOpenAICompatibleModels",
+    title: "BYOK",
+    description: "Save additional OpenAI-compatible model ids for the BYOK picker.",
+    placeholder: "provider/model",
+    example: "openai/gpt-4o",
+  },
 };
 
 export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
@@ -493,7 +519,7 @@ export function resolveTerminalFontFamilyStack(value: string | null | undefined)
 }
 
 function normalizeProviderBinaryPathOverride(
-  provider: ProviderKind,
+  provider: Exclude<ProviderKind, "openaiCompatible">,
   value: string | null | undefined,
 ): string {
   const trimmed = value?.trim() ?? "";
@@ -517,6 +543,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     // reusable provider credentials in browser state or localStorage.
     kiloServerPassword: "",
     openCodeServerPassword: "",
+    openaiCompatibleApiKey: "",
     claudeBinaryPath: normalizeProviderBinaryPathOverride("claudeAgent", settings.claudeBinaryPath),
     codexBinaryPath: normalizeProviderBinaryPathOverride("codex", settings.codexBinaryPath),
     cursorBinaryPath: normalizeProviderBinaryPathOverride("cursor", settings.cursorBinaryPath),
@@ -548,6 +575,10 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     customKiloModels: normalizeCustomModelSlugs(settings.customKiloModels, "kilo"),
     customOpenCodeModels: normalizeCustomModelSlugs(settings.customOpenCodeModels, "opencode"),
     customPiModels: normalizeCustomModelSlugs(settings.customPiModels, "pi"),
+    customOpenAICompatibleModels: normalizeCustomModelSlugs(
+      settings.customOpenAICompatibleModels,
+      "openaiCompatible",
+    ),
     hiddenProviders: normalizeHiddenProviders(settings.hiddenProviders),
     providerOrder: normalizeProviderOrder(settings.providerOrder),
     hiddenModels: [],
@@ -556,6 +587,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
 
 function serverSettingsToAppSettings(settings: ServerSettingsView): Partial<AppSettings> {
   return {
+    secretProtectionMode: settings.secretProtectionMode,
     claudeBinaryPath: settings.providers.claudeAgent.binaryPath,
     codexBinaryPath: settings.providers.codex.binaryPath,
     codexHomePath: settings.providers.codex.homePath,
@@ -576,6 +608,10 @@ function serverSettingsToAppSettings(settings: ServerSettingsView): Partial<AppS
     openCodeServerUrl: settings.providers.opencode.serverUrl,
     piAgentDir: settings.providers.pi.agentDir,
     piBinaryPath: settings.providers.pi.binaryPath,
+    openaiCompatibleBaseUrl: settings.providers.openaiCompatible.baseUrl,
+    openaiCompatibleCatalogProviderId: settings.providers.openaiCompatible.catalogProviderId,
+    openaiCompatibleDefaultModel: settings.providers.openaiCompatible.defaultModel,
+    openaiCompatibleApiKeyConfigured: settings.providers.openaiCompatible.apiKeyConfigured,
     customCodexModels: settings.providers.codex.customModels,
     customClaudeModels: settings.providers.claudeAgent.customModels,
     customCursorModels: settings.providers.cursor.customModels,
@@ -585,6 +621,7 @@ function serverSettingsToAppSettings(settings: ServerSettingsView): Partial<AppS
     customKiloModels: settings.providers.kilo.customModels,
     customOpenCodeModels: settings.providers.opencode.customModels,
     customPiModels: settings.providers.pi.customModels,
+    customOpenAICompatibleModels: settings.providers.openaiCompatible.customModels,
     textGenerationProvider: settings.textGenerationModelSelection.provider,
     textGenerationModel: settings.textGenerationModelSelection.model,
   };
@@ -614,7 +651,11 @@ function touchesProviderDiscoverySettings(patch: Partial<AppSettings>): boolean 
     hasOwn(patch, "openCodeExperimentalWebSockets") ||
     hasOwn(patch, "openCodeServerPassword") ||
     hasOwn(patch, "openCodeServerUrl") ||
-    hasOwn(patch, "piAgentDir")
+    hasOwn(patch, "piAgentDir") ||
+    hasOwn(patch, "openaiCompatibleBaseUrl") ||
+    hasOwn(patch, "openaiCompatibleDefaultModel") ||
+    hasOwn(patch, "openaiCompatibleApiKey") ||
+    hasOwn(patch, "customOpenAICompatibleModels")
   );
 }
 
@@ -622,6 +663,9 @@ function appSettingsPatchToServerSettingsPatch(patch: Partial<AppSettings>): Ser
   const providers: MutableServerSettingsProvidersPatch = {};
   const serverPatch: MutableServerSettingsPatch = {};
 
+  if (hasOwn(patch, "secretProtectionMode")) {
+    serverPatch.secretProtectionMode = patch.secretProtectionMode ?? "off";
+  }
   if (hasOwn(patch, "enableAssistantStreaming")) {
     serverPatch.enableAssistantStreaming = Boolean(patch.enableAssistantStreaming);
   }
@@ -751,6 +795,31 @@ function appSettingsPatchToServerSettingsPatch(patch: Partial<AppSettings>): Ser
       ...(hasOwn(patch, "customPiModels") ? { customModels: patch.customPiModels ?? [] } : {}),
     };
   }
+  if (
+    hasOwn(patch, "openaiCompatibleBaseUrl") ||
+    hasOwn(patch, "openaiCompatibleCatalogProviderId") ||
+    hasOwn(patch, "openaiCompatibleDefaultModel") ||
+    hasOwn(patch, "openaiCompatibleApiKey") ||
+    hasOwn(patch, "customOpenAICompatibleModels")
+  ) {
+    providers.openaiCompatible = {
+      ...(hasOwn(patch, "openaiCompatibleBaseUrl")
+        ? { baseUrl: patch.openaiCompatibleBaseUrl ?? "" }
+        : {}),
+      ...(hasOwn(patch, "openaiCompatibleCatalogProviderId")
+        ? { catalogProviderId: patch.openaiCompatibleCatalogProviderId ?? "" }
+        : {}),
+      ...(hasOwn(patch, "openaiCompatibleDefaultModel")
+        ? { defaultModel: patch.openaiCompatibleDefaultModel ?? "" }
+        : {}),
+      ...(hasOwn(patch, "openaiCompatibleApiKey")
+        ? { apiKey: patch.openaiCompatibleApiKey ?? "" }
+        : {}),
+      ...(hasOwn(patch, "customOpenAICompatibleModels")
+        ? { customModels: patch.customOpenAICompatibleModels ?? [] }
+        : {}),
+    };
+  }
 
   if (Object.keys(providers).length > 0) {
     serverPatch.providers = providers;
@@ -788,6 +857,8 @@ function buildInitialServerSettingsMigrationPatch(settings: AppSettings): Server
     "openCodeServerUrl",
     "piAgentDir",
     "piBinaryPath",
+    "openaiCompatibleBaseUrl",
+    "openaiCompatibleDefaultModel",
     "textGenerationModel",
     "textGenerationProvider",
   ] as const) {
@@ -804,6 +875,9 @@ function buildInitialServerSettingsMigrationPatch(settings: AppSettings): Server
   if (settings.openCodeServerPassword.trim()) {
     patch.openCodeServerPassword = settings.openCodeServerPassword;
   }
+  if (settings.openaiCompatibleApiKey.trim()) {
+    patch.openaiCompatibleApiKey = settings.openaiCompatibleApiKey;
+  }
 
   for (const key of [
     "customCodexModels",
@@ -815,6 +889,7 @@ function buildInitialServerSettingsMigrationPatch(settings: AppSettings): Server
     "customKiloModels",
     "customOpenCodeModels",
     "customPiModels",
+    "customOpenAICompatibleModels",
   ] as const) {
     if (normalizedSettings[key].length > 0) {
       patch[key] = normalizedSettings[key] as never;
@@ -864,6 +939,7 @@ export function getCustomModelsByProvider(
     kilo: getCustomModelsForProvider(settings, "kilo"),
     opencode: getCustomModelsForProvider(settings, "opencode"),
     pi: getCustomModelsForProvider(settings, "pi"),
+    openaiCompatible: getCustomModelsForProvider(settings, "openaiCompatible"),
   };
 }
 
@@ -1012,6 +1088,10 @@ export function getCustomModelOptionsByProvider(
     kilo: getAppModelOptions("kilo", customModelsByProvider.kilo),
     opencode: getAppModelOptions("opencode", customModelsByProvider.opencode),
     pi: getAppModelOptions("pi", customModelsByProvider.pi),
+    openaiCompatible: getAppModelOptions(
+      "openaiCompatible",
+      customModelsByProvider.openaiCompatible,
+    ),
   };
 }
 
@@ -1033,6 +1113,7 @@ export function getProviderStartOptions(
     | "openCodeServerUrl"
     | "piAgentDir"
     | "piBinaryPath"
+    | "openaiCompatibleBaseUrl"
   >,
 ): ProviderStartOptions | undefined {
   const claudeBinaryPath = normalizeProviderBinaryPathOverride(
@@ -1126,6 +1207,13 @@ export function getProviderStartOptions(
           },
         }
       : {}),
+    ...(settings.openaiCompatibleBaseUrl
+      ? {
+          openaiCompatible: {
+            baseUrl: settings.openaiCompatibleBaseUrl,
+          },
+        }
+      : {}),
   };
 
   return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
@@ -1193,6 +1281,8 @@ export function getCustomBinaryPathForProvider(
       return normalizeProviderBinaryPathOverride(provider, settings.openCodeBinaryPath);
     case "pi":
       return normalizeProviderBinaryPathOverride(provider, settings.piBinaryPath);
+    case "openaiCompatible":
+      return "";
   }
 }
 
@@ -1264,6 +1354,9 @@ export function useAppSettings() {
           : {}),
         ...(hasOwn(patch, "openCodeServerPassword")
           ? { openCodeServerPasswordConfigured: Boolean(patch.openCodeServerPassword?.trim()) }
+          : {}),
+        ...(hasOwn(patch, "openaiCompatibleApiKey")
+          ? { openaiCompatibleApiKeyConfigured: Boolean(patch.openaiCompatibleApiKey?.trim()) }
           : {}),
       }),
     );

@@ -43,6 +43,8 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
+import { envValueForProvider } from "../../byok/byokConnectionRegistry.ts";
+import { checkOpenAICompatibleProviderStatus } from "../checkOpenAICompatibleProviderStatus.ts";
 import {
   compareCodexCliVersions,
   formatCodexCliUpgradeMessage,
@@ -134,10 +136,15 @@ const PROVIDERS = [
   KILO_PROVIDER,
   OPENCODE_PROVIDER,
   PI_PROVIDER,
+  "openaiCompatible",
 ] as const satisfies ReadonlyArray<ProviderKind>;
 
-const providerChildKind = (provider: ProviderKind): ProviderChildKind =>
-  provider === CLAUDE_AGENT_PROVIDER ? "claude" : provider;
+const providerChildKind = (provider: ProviderKind): ProviderChildKind => {
+  if (provider === "openaiCompatible") {
+    throw new Error("openaiCompatible has no provider child environment");
+  }
+  return provider === CLAUDE_AGENT_PROVIDER ? "claude" : provider;
+};
 
 const providerCommandEnv = (provider: ProviderKind): NodeJS.ProcessEnv =>
   buildProviderChildEnvironment({ provider: providerChildKind(provider) });
@@ -2128,17 +2135,14 @@ export function makeProviderHealthLive(options?: { readonly providerUpdateTimeou
       const refreshScope = yield* Scope.make("sequential");
       yield* Effect.addFinalizer(() => Scope.close(refreshScope, Exit.void));
 
-      const cachePathByProvider = new Map(
-        PROVIDERS.map(
-          (provider) =>
-            [
-              provider,
-              resolveProviderStatusCachePath({
-                stateDir: serverConfig.stateDir,
-                provider,
-              }),
-            ] as const,
-        ),
+      const cachePathByProvider = new Map<ProviderKind, string>(
+        PROVIDERS.map((provider) => [
+          provider,
+          resolveProviderStatusCachePath({
+            stateDir: serverConfig.stateDir,
+            provider,
+          }),
+        ]),
       );
 
       const cachedStatuses: ProviderStatuses = yield* Effect.forEach(
@@ -2205,6 +2209,8 @@ export function makeProviderHealthLive(options?: { readonly providerUpdateTimeou
             return settings.providers.opencode.binaryPath;
           case "pi":
             return settings.providers.pi.binaryPath;
+          case "openaiCompatible":
+            return "";
         }
       };
 
@@ -2418,6 +2424,20 @@ export function makeProviderHealthLive(options?: { readonly providerUpdateTimeou
                     settings.providers.pi.binaryPath,
                   ),
                 ),
+                checkProviderWhenEnabled(
+                  settings,
+                  "openaiCompatible",
+                  Effect.sync(() =>
+                    checkOpenAICompatibleProviderStatus({
+                      catalogProviderId: settings.providers.openaiCompatible.catalogProviderId,
+                      apiKeyConfigured: settings.providers.openaiCompatible.apiKeyConfigured,
+                      envApiKey: envValueForProvider(
+                        settings.providers.openaiCompatible.catalogProviderId.trim() ||
+                          "openrouter",
+                      ),
+                    }),
+                  ),
+                ),
               ],
               {
                 concurrency: "unbounded",
@@ -2442,8 +2462,12 @@ export function makeProviderHealthLive(options?: { readonly providerUpdateTimeou
           statuses,
           (status) => {
             const { updateState: _updateState, ...statusToPersist } = status;
+            const filePath = cachePathByProvider.get(status.provider);
+            if (!filePath) {
+              return Effect.void;
+            }
             return writeProviderStatusCache({
-              filePath: cachePathByProvider.get(status.provider)!,
+              filePath,
               provider: statusToPersist,
             }).pipe(
               Effect.provideService(FileSystem.FileSystem, fileSystem),

@@ -105,9 +105,14 @@ import {
   collectParentDirectoryPaths,
   resolveFilePreviewWorkspaceRoot,
   resolveRoutePanelBootstrap,
+  shouldRenderProjectEditorView,
   stripEditorViewSearchParams,
 } from "../../routes/-chatThreadRoute.logic";
 import { cn } from "~/lib/utils";
+import {
+  isPortLogPrimaryDrawingPath,
+  resolvePortLogEditorCenterMode,
+} from "../../portlog/portlogWorkspaceArtifacts";
 
 const PullRequestDockPane = lazy(() => import("../pullRequest/PullRequestDockPane"));
 const EditorWorkspaceView = lazy(() =>
@@ -236,7 +241,7 @@ export function SingleChatSurface(props: {
   const [editorExpandedDirectories, setEditorExpandedDirectories] = useState<ReadonlySet<string>>(
     () => new Set(readEditorViewState(props.threadId)?.expandedDirectories ?? []),
   );
-  const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff">(() =>
+  const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff" | "drawing">(() =>
     props.search.editorFilePath
       ? "file"
       : (readEditorViewState(props.threadId)?.centerMode ?? "diff"),
@@ -259,7 +264,24 @@ export function SingleChatSurface(props: {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [props.search.editorFilePath, props.threadId]);
-  const editorViewActive = props.search.view === "editor";
+  const editorViewActive = shouldRenderProjectEditorView({
+    view: props.search.view,
+    projectKind: activeProject?.kind,
+  });
+  useEffect(() => {
+    if (props.search.view !== undefined || activeProject?.kind !== "project") {
+      return;
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: props.threadId },
+      replace: true,
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        view: "editor",
+      }),
+    });
+  }, [activeProject?.kind, navigate, props.search.view, props.threadId]);
   useEffect(() => {
     if (!editorViewActive) {
       return;
@@ -343,12 +365,30 @@ export function SingleChatSurface(props: {
     void navigate({
       to: "/$threadId",
       params: { threadId: props.threadId },
-      search: (previous) => stripEditorViewSearchParams(stripDiffSearchParams(previous)),
+      search: (previous) => ({
+        ...stripEditorViewSearchParams(stripDiffSearchParams(previous)),
+        view: "chat",
+      }),
     });
   };
 
   const handleSelectEditorFile = (filePath: string) => {
     setEditorCenterMode("file");
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: props.threadId },
+      replace: true,
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        view: "editor",
+        editorFilePath: filePath,
+      }),
+    });
+  };
+
+  const handleDoubleClickEditorFile = (filePath: string) => {
+    if (!isPortLogPrimaryDrawingPath(filePath)) return;
+    setEditorCenterMode(resolvePortLogEditorCenterMode(filePath));
     void navigate({
       to: "/$threadId",
       params: { threadId: props.threadId },
@@ -664,6 +704,12 @@ export function SingleChatSurface(props: {
       },
     );
   };
+  const handleOpenWorkspace = () => {
+    void navigate({
+      to: "/",
+      search: () => ({ launcher: true }),
+    });
+  };
   const handleSelectEditorProject = (projectId: ProjectId) => {
     void openEditorProject(projectId).catch((error: unknown) => {
       toastManager.add({
@@ -924,7 +970,37 @@ export function SingleChatSurface(props: {
     lastOpenPanel: "browser",
   };
 
-  if (props.search.view === "editor") {
+  if (props.search.view === "model") {
+    return (
+      <WorkspaceFileOpenerContext.Provider value={dockFileOpener}>
+        <div
+          className={cn(
+            CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
+            CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME,
+            "chat-pane-enter",
+          )}
+        >
+          <RouteInsetSurface surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}>
+            <DeferredChatView
+              threadId={props.threadId}
+              paneScopeId={SINGLE_CHAT_PANE_SCOPE_ID}
+              deferMount={false}
+              surfaceMode="single"
+              presentationMode="model"
+              isFocusedPane
+              panelState={chatPanelState}
+              onToggleDiff={noopChatSurfaceAction}
+              onToggleBrowser={noopChatSurfaceAction}
+              onOpenBrowserUrl={noopChatSurfaceAction}
+              onOpenTurnDiff={noopChatSurfaceAction}
+            />
+          </RouteInsetSurface>
+        </div>
+      </WorkspaceFileOpenerContext.Provider>
+    );
+  }
+
+  if (editorViewActive) {
     return (
       <WorkspaceFileOpenerContext.Provider value={editorFileOpener}>
         <div
@@ -945,6 +1021,7 @@ export function SingleChatSurface(props: {
               diffOptionsControl={editorDiffOptionsControl}
               onSelectDiffFile={handleSelectEditorDiffFile}
               onSelectFile={handleSelectEditorFile}
+              onDoubleClickFile={handleDoubleClickEditorFile}
               onToggleDirectory={handleToggleEditorDirectory}
               onCenterModeChange={setEditorCenterMode}
               onExitEditorView={handleCloseEditorView}
@@ -952,6 +1029,7 @@ export function SingleChatSurface(props: {
               onAskWhyInChat={handleAskWhyInChat}
               onCommentInChat={handleCommentInChat}
               onSelectProject={handleSelectEditorProject}
+              onOpenWorkspace={handleOpenWorkspace}
               diffPanel={
                 <LazyDiffPanel
                   mode="sidebar"

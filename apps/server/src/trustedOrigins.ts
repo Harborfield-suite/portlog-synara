@@ -66,6 +66,21 @@ function isTrustedRequestOriginHost(requestOrigin: string, config: ServerConfigS
   return normalizeHostForComparison(requestHost) === normalizeHostForComparison(config.host);
 }
 
+function isLoopbackDevOriginAlias(origin: string, configuredDevUrl: URL | undefined): boolean {
+  if (!configuredDevUrl) return false;
+  try {
+    const candidate = new URL(origin);
+    return (
+      candidate.protocol === configuredDevUrl.protocol &&
+      candidate.port === configuredDevUrl.port &&
+      isLoopbackHost(candidate.hostname) &&
+      isLoopbackHost(configuredDevUrl.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function isTrustedAppOrigin(input: {
   readonly origin: string | null;
   readonly requestOrigin: string;
@@ -77,6 +92,7 @@ export function isTrustedAppOrigin(input: {
     (input.origin === input.requestOrigin &&
       isTrustedRequestOriginHost(input.requestOrigin, input.config)) ||
     input.origin === input.config.devUrl?.origin ||
+    isLoopbackDevOriginAlias(input.origin, input.config.devUrl) ||
     DESKTOP_APP_CORS_ORIGINS.has(input.origin)
   );
 }

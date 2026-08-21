@@ -38,6 +38,11 @@ interface QueryResultLike {
   readonly data?: {
     readonly agents?: ReadonlyArray<{ name: string; displayName: string }>;
     readonly cached?: boolean;
+    readonly groups?: ReadonlyArray<{
+      readonly id: string;
+      readonly name: string;
+      readonly models: ReadonlyArray<{ id: string; name: string }>;
+    }>;
     readonly models?: ReadonlyArray<ProviderModelDescriptor>;
     readonly source?: string;
   };
@@ -53,6 +58,23 @@ const EMPTY_QUERY: QueryResultLike = {
 };
 const modelQueries = new Map<ProviderKind, QueryResultLike>();
 const agentQueries = new Map<ProviderKind, QueryResultLike>();
+const BYOK_QUERY: QueryResultLike = {
+  data: {
+    groups: [
+      {
+        id: "openrouter",
+        name: "OpenRouter",
+        models: [
+          { id: "openai/gpt-4o", name: "GPT-4o" },
+          { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
+        ],
+      },
+    ],
+  },
+  isFetching: false,
+  isLoading: false,
+  isPlaceholderData: false,
+};
 const MODEL_HINTS = { cursor: "composer-2" } as const;
 const SETTINGS = {
   antigravityBinaryPath: "",
@@ -74,6 +96,8 @@ const SETTINGS = {
   openCodeBinaryPath: "",
   piAgentDir: "",
   piBinaryPath: "",
+  openaiCompatibleCatalogProviderId: "openrouter",
+  openaiCompatibleDefaultModel: "openai/gpt-4o",
 };
 
 function readCatalogRenders(
@@ -119,6 +143,9 @@ beforeEach(() => {
     .mockReturnValue({ settings: SETTINGS, serverSettings: DEFAULT_SERVER_SETTINGS });
   mocks.useQuery.mockReset().mockImplementation((value: QueryOptionsLike) => {
     const [, resource, provider] = value.queryKey;
+    if (resource === "byokCatalogGroups") {
+      return BYOK_QUERY;
+    }
     if (resource === "models") {
       return modelQueries.get(provider as ProviderKind) ?? EMPTY_QUERY;
     }
@@ -130,6 +157,42 @@ beforeEach(() => {
 });
 
 describe("useProviderModelCatalog", () => {
+  it("prefetches curated BYOK models for the model-first picker", () => {
+    const [catalog] = readCatalogRenders({
+      selectedProvider: "codex",
+      discoveryEnabled: true,
+      modelHintByProvider: { codex: "gpt-5.5" },
+    });
+
+    expect(catalog?.modelOptionsByProvider.openaiCompatible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "anthropic/claude-sonnet-4",
+          upstreamProviderName: "OpenRouter",
+        }),
+      ]),
+    );
+  });
+
+  it("uses the selected curated BYOK provider models in the openaiCompatible picker", () => {
+    const [catalog] = readCatalogRenders({
+      selectedProvider: "openaiCompatible",
+      discoveryEnabled: true,
+      modelHintByProvider: { openaiCompatible: "openai/gpt-4o" },
+    });
+
+    expect(catalog?.modelOptionsByProvider.openaiCompatible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "openai/gpt-4o",
+          name: "GPT-4o (OpenAI-compatible)",
+          upstreamProviderId: "openrouter",
+          upstreamProviderName: "OpenRouter",
+        }),
+      ]),
+    );
+  });
+
   it("keeps aggregate identities stable when inputs and query data are unchanged", () => {
     const [first, second] = readCatalogRenders({
       selectedProvider: "cursor",

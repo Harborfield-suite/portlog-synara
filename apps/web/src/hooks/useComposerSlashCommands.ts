@@ -81,6 +81,7 @@ export function useComposerSlashCommands(input: {
   handleInteractionModeChange: (mode: "default" | "plan") => Promise<void> | void;
   openForkTargetPicker: () => void;
   openReviewTargetPicker: () => void;
+  openModelPicker: () => void;
   setComposerDraftProviderModelOptions: (
     threadId: ThreadId,
     provider: ProviderKind,
@@ -132,6 +133,7 @@ export function useComposerSlashCommands(input: {
     handleInteractionModeChange,
     openForkTargetPicker,
     openReviewTargetPicker,
+    openModelPicker,
     setComposerDraftProviderModelOptions,
     editorActions,
   } = input;
@@ -644,8 +646,17 @@ export function useComposerSlashCommands(input: {
         trimmed,
         availableBuiltInSlashCommands,
       );
-      if (!slashInvocation || slashInvocation.command === "model") {
+      if (!slashInvocation) {
         return false;
+      }
+      if (slashInvocation.command === "model") {
+        if (slashInvocation.args.length > 0) {
+          return false;
+        }
+        editorActions.clearComposerSlashDraft();
+        openModelPicker();
+        editorActions.scheduleComposerFocus();
+        return true;
       }
       if (slashInvocation.command === "clear") {
         editorActions.clearComposerSlashDraft();
@@ -787,6 +798,7 @@ export function useComposerSlashCommands(input: {
       handleInteractionModeChange,
       openForkTargetPicker,
       openFeedbackDialog,
+      openModelPicker,
       openReviewTargetPicker,
       selectedProvider,
       supportsTextNativeReviewCommand,
@@ -804,20 +816,16 @@ export function useComposerSlashCommands(input: {
       }
 
       if (item.command === "model") {
-        const replacement = "/model ";
-        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
-          snapshot.value,
-          trigger.rangeEnd,
-          replacement,
-        );
         const applied = editorActions.applyPromptReplacement(
           trigger.rangeStart,
-          replacementRangeEnd,
-          replacement,
-          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+          trigger.rangeEnd,
+          "",
+          { expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd) },
         );
         if (wasPromptReplacementApplied(applied)) {
           editorActions.setComposerHighlightedItemId(null);
+          openModelPicker();
+          editorActions.scheduleComposerFocus();
         }
         return;
       }

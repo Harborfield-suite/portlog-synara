@@ -466,3 +466,180 @@ export type ServerUpdateSettingsInput = typeof ServerUpdateSettingsInput.Type;
 
 export const ServerUpdateSettingsResult = ServerSettingsView;
 export type ServerUpdateSettingsResult = typeof ServerUpdateSettingsResult.Type;
+
+// OMP-compatible models.dev BYOK catalogue (compact index + per-provider models).
+export const ServerByokCatalogWire = Schema.Literals(["openai", "anthropic", "gemini"]);
+export type ServerByokCatalogWire = typeof ServerByokCatalogWire.Type;
+
+export const ServerByokConnectionStatus = Schema.Literals([
+  "connected",
+  "not-configured",
+  "unavailable",
+  "error",
+  "checking",
+]);
+export type ServerByokConnectionStatus = typeof ServerByokConnectionStatus.Type;
+
+export const ServerByokAuthMethod = Schema.Literals(["api-key", "oauth", "none"]);
+export type ServerByokAuthMethod = typeof ServerByokAuthMethod.Type;
+
+export const ServerByokCredentialSource = Schema.Literals(["environment", "stored"]);
+export type ServerByokCredentialSource = typeof ServerByokCredentialSource.Type;
+
+export const ServerByokErrorReason = Schema.Literals([
+  "invalid-credential",
+  "network",
+  "endpoint-offline",
+  "unknown",
+]);
+export type ServerByokErrorReason = typeof ServerByokErrorReason.Type;
+
+export const ServerByokProviderIndexEntry = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  doc: Schema.String,
+  modelCount: NonNegativeInt,
+  isLocal: Schema.Boolean,
+  wire: ServerByokCatalogWire,
+  baseUrl: Schema.String,
+  apiKeyConfigured: Schema.Boolean,
+  status: ServerByokConnectionStatus.pipe(Schema.withDecodingDefault(() => "not-configured")),
+  supportedAuth: Schema.Array(ServerByokAuthMethod).pipe(
+    Schema.withDecodingDefault(() => ["api-key"] as const),
+  ),
+  auth: Schema.NullOr(ServerByokAuthMethod).pipe(Schema.withDecodingDefault(() => null)),
+  credentialSource: Schema.NullOr(ServerByokCredentialSource).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  maskedKeySuffix: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
+  errorReason: Schema.NullOr(ServerByokErrorReason).pipe(Schema.withDecodingDefault(() => null)),
+  envVar: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
+  accountLabel: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
+});
+export type ServerByokProviderIndexEntry = typeof ServerByokProviderIndexEntry.Type;
+export const ServerByokCatalogMetadata = Schema.Struct({
+  catalogRevision: TrimmedNonEmptyString,
+  ompRevision: TrimmedNonEmptyString,
+  syncDate: TrimmedNonEmptyString,
+});
+export type ServerByokCatalogMetadata = typeof ServerByokCatalogMetadata.Type;
+
+export const ServerByokCatalogGroupModel = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  qualifiedId: TrimmedNonEmptyString,
+  context: Schema.NullOr(Schema.Number),
+  reasoning: Schema.Boolean,
+  released: Schema.String,
+  toolCapable: Schema.optional(Schema.Boolean),
+});
+export type ServerByokCatalogGroupModel = typeof ServerByokCatalogGroupModel.Type;
+
+export const ServerByokCatalogGroup = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  doc: Schema.String,
+  models: Schema.Array(ServerByokCatalogGroupModel),
+});
+export type ServerByokCatalogGroup = typeof ServerByokCatalogGroup.Type;
+
+export const ServerListByokCatalogGroupsInput = Schema.Struct({
+  query: Schema.optional(Schema.String),
+});
+export type ServerListByokCatalogGroupsInput = typeof ServerListByokCatalogGroupsInput.Type;
+
+export const ServerListByokCatalogGroupsResult = Schema.Struct({
+  groups: Schema.Array(ServerByokCatalogGroup),
+  metadata: ServerByokCatalogMetadata,
+});
+export type ServerListByokCatalogGroupsResult = typeof ServerListByokCatalogGroupsResult.Type;
+
+export const ServerListByokProvidersResult = Schema.Struct({
+  providers: Schema.Array(ServerByokProviderIndexEntry),
+  metadata: ServerByokCatalogMetadata,
+});
+export type ServerListByokProvidersResult = typeof ServerListByokProvidersResult.Type;
+
+export const ServerByokOAuthProvider = Schema.Literals([
+  "openai-codex",
+  "anthropic",
+  "cursor",
+  "google-antigravity",
+  "xai-oauth",
+  "droid",
+  "kilo",
+  "opencode",
+]);
+export type ServerByokOAuthProvider = typeof ServerByokOAuthProvider.Type;
+
+export const ServerStartByokOAuthInput = Schema.Struct({
+  provider: ServerByokOAuthProvider,
+});
+export type ServerStartByokOAuthInput = typeof ServerStartByokOAuthInput.Type;
+
+export const ServerStartByokOAuthResult = Schema.Struct({
+  provider: ServerByokOAuthProvider,
+  executable: TrimmedNonEmptyString,
+  args: Schema.Array(Schema.String),
+});
+export type ServerStartByokOAuthResult = typeof ServerStartByokOAuthResult.Type;
+
+export const ServerLogoutByokOAuthInput = ServerStartByokOAuthInput;
+export type ServerLogoutByokOAuthInput = typeof ServerLogoutByokOAuthInput.Type;
+
+export const ServerLogoutByokOAuthResult = ServerStartByokOAuthResult;
+export type ServerLogoutByokOAuthResult = typeof ServerLogoutByokOAuthResult.Type;
+
+export const ServerListByokModelsInput = Schema.Struct({
+  provider: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+});
+export type ServerListByokModelsInput = typeof ServerListByokModelsInput.Type;
+
+export const ServerByokCatalogModel = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  context: Schema.NullOr(Schema.Number),
+  reasoning: Schema.Boolean,
+  released: Schema.String,
+  toolCapable: Schema.optional(Schema.Boolean),
+});
+export type ServerByokCatalogModel = typeof ServerByokCatalogModel.Type;
+
+export const ServerListByokModelsResult = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  models: Schema.Array(ServerByokCatalogModel),
+});
+export type ServerListByokModelsResult = typeof ServerListByokModelsResult.Type;
+
+export const ServerSetByokApiKeyInput = Schema.Struct({
+  provider: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+  apiKey: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))),
+});
+export type ServerSetByokApiKeyInput = typeof ServerSetByokApiKeyInput.Type;
+
+export const ServerSetByokApiKeyResult = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  apiKeyConfigured: Schema.Boolean,
+  status: ServerByokConnectionStatus.pipe(Schema.withDecodingDefault(() => "not-configured")),
+  errorReason: Schema.NullOr(ServerByokErrorReason).pipe(Schema.withDecodingDefault(() => null)),
+  credentialSource: Schema.NullOr(ServerByokCredentialSource).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  maskedKeySuffix: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
+});
+export type ServerSetByokApiKeyResult = typeof ServerSetByokApiKeyResult.Type;
+
+export const ServerTestByokConnectionInput = Schema.Struct({
+  provider: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+});
+export type ServerTestByokConnectionInput = typeof ServerTestByokConnectionInput.Type;
+
+export const ServerTestByokConnectionResult = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  status: ServerByokConnectionStatus,
+  errorReason: Schema.NullOr(ServerByokErrorReason),
+  credentialSource: Schema.NullOr(ServerByokCredentialSource),
+  maskedKeySuffix: Schema.NullOr(Schema.String),
+  apiKeyConfigured: Schema.Boolean,
+});
+export type ServerTestByokConnectionResult = typeof ServerTestByokConnectionResult.Type;

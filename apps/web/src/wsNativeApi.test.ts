@@ -298,6 +298,7 @@ describe("wsNativeApi", () => {
 
     const payload = {
       settings: {
+        secretProtectionMode: "off",
         enableAssistantStreaming: true,
         enableProviderUpdateChecks: true,
         defaultThreadEnvMode: "local",
@@ -326,6 +327,14 @@ describe("wsNativeApi", () => {
             customModels: [],
           },
           pi: { enabled: true, binaryPath: "pi", agentDir: "", customModels: [] },
+          openaiCompatible: {
+            enabled: true,
+            catalogProviderId: "openrouter",
+            baseUrl: "https://openrouter.ai/api/v1",
+            defaultModel: "openai/gpt-4o",
+            customModels: [],
+            apiKeyConfigured: false,
+          },
         },
         skills: { disabled: [] },
       },

@@ -209,6 +209,19 @@ export function makeModelSelection(
           ? { options: options as Extract<ModelSelection, { provider: "pi" }>["options"] }
           : {}),
       };
+    case "openaiCompatible":
+      return {
+        provider,
+        model,
+        ...(options
+          ? {
+              options: options as Extract<
+                ModelSelection,
+                { provider: "openaiCompatible" }
+              >["options"],
+            }
+          : {}),
+      };
   }
 }
 
@@ -713,7 +726,12 @@ export function deriveEffectiveComposerModelState(input: {
         activeSelection.model,
       )
     : null;
-  const unlistedDraftModel = input.selectedProvider === "pi" ? selectedDraftModel : null;
+  // BYOK OpenRouter (and Pi) catalogs are larger than Synara's static seed list.
+  // Prefer the draft/catalog slug over availableOptions[0] (often openai/gpt-4o).
+  const unlistedDraftModel =
+    input.selectedProvider === "pi" || input.selectedProvider === "openaiCompatible"
+      ? selectedDraftModel
+      : null;
   const selectedModel =
     resolveAvailableModel(activeSelection?.model) ??
     resolveAvailableModel(

@@ -18,6 +18,25 @@ describe("diffRouteSearchEquals", () => {
       ),
     ).toBe(true);
   });
+  it("parses the model viewer without carrying editor file state", () => {
+    expect(
+      parseDiffRouteSearch({
+        view: "model",
+        editorFilePath: "src/ignored.ts",
+      }),
+    ).toEqual({ view: "model" });
+  });
+
+  it("accepts the explicit chat route used to leave the project editor", () => {
+    expect(parseDiffRouteSearch({ view: "chat" })).toEqual({ view: "chat" });
+    expect(diffRouteSearchEquals({ view: "chat" }, { view: "chat" })).toBe(true);
+    expect(diffRouteSearchEquals({ view: "editor" }, { view: "chat" })).toBe(false);
+  });
+
+  it("accepts the model viewer route", () => {
+    expect(diffRouteSearchEquals({ view: "model" }, { view: "model" })).toBe(true);
+    expect(diffRouteSearchEquals({ view: "editor" }, { view: "model" })).toBe(false);
+  });
 });
 
 describe("parseDiffRouteSearch", () => {

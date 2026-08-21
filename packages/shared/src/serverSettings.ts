@@ -84,5 +84,10 @@ export function providerStartOptionsFromServerSettings(
       ...(providers.pi.binaryPath ? { binaryPath: providers.pi.binaryPath } : {}),
       ...(providers.pi.agentDir ? { agentDir: providers.pi.agentDir } : {}),
     },
+    openaiCompatible: {
+      ...(providers.openaiCompatible.baseUrl
+        ? { baseUrl: providers.openaiCompatible.baseUrl }
+        : {}),
+    },
   };
 }

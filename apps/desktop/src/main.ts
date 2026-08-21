@@ -37,6 +37,7 @@ import type {
 } from "electron";
 import * as Effect from "effect/Effect";
 import type {
+  DesktopDexpiImportInput,
   DesktopTheme,
   DesktopUpdateActionResult,
   DesktopUpdateState,
@@ -135,6 +136,7 @@ import {
   shouldCheckForUpdatesOnForeground,
 } from "./updateState";
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
+import { renderDexpiSource } from "../../../scripts/dexpi-renderer.mjs";
 import {
   applyDesktopPhysicalZoomAction,
   resolveDesktopMenuAccelerator,
@@ -3525,6 +3527,54 @@ function registerIpcHandlers(): void {
   ipcMain.removeHandler(IPC.storageMigration.acknowledge);
   ipcMain.handle(IPC.storageMigration.acknowledge, async () => {
     await acknowledgeSynaraStorageSnapshot(storageSnapshotPath);
+  });
+
+  ipcMain.removeHandler(IPC.dexpiImportSource);
+  ipcMain.handle(IPC.dexpiImportSource, async (_event, input?: DesktopDexpiImportInput) => {
+    const requestedPath = input?.sourcePath?.trim();
+    const selectedPath = requestedPath
+      ? Path.resolve(input?.cwd?.trim() || BASE_DIR, requestedPath)
+      : null;
+    const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
+    const result = selectedPath
+      ? null
+      : owner
+        ? await dialog.showOpenDialog(owner, {
+            properties: ["openFile"],
+            filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+          })
+        : await dialog.showOpenDialog({
+            properties: ["openFile"],
+            filters: [{ name: "DEXPI XML", extensions: ["xml"] }],
+          });
+    if (result?.canceled) return null;
+
+    const resolvedPath = selectedPath ?? result?.filePaths[0];
+    if (!resolvedPath || Path.extname(resolvedPath).toLowerCase() !== ".xml") {
+      throw new Error("Select a DEXPI XML source file.");
+    }
+
+    const rendererPath = process.env.SYNARA_PYDEXPI_SPIKE?.trim();
+    if (!rendererPath) {
+      throw new Error(
+        "The local pydexpi renderer is not configured. Set SYNARA_PYDEXPI_SPIKE and relaunch Synara.",
+      );
+    }
+
+    const artifact = await renderDexpiSource({
+      sourcePath: resolvedPath,
+      cacheRoot: Path.join(BASE_DIR, "artifacts", "dexpi"),
+      rendererPath,
+    });
+    return {
+      sourcePath: Path.resolve(resolvedPath),
+      sourceFilename: Path.basename(resolvedPath),
+      sourceSha256: artifact.sourceSha256,
+      svgPath: artifact.svgPath,
+      scenePath: artifact.scenePath,
+      diagnosticsPath: artifact.diagnosticsPath,
+      cached: artifact.cached,
+    };
   });
 
   ipcMain.removeAllListeners(IPC.wsUrl);

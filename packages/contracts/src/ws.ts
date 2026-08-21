@@ -92,13 +92,19 @@ import {
   ServerGenerateAutomationIntentInput,
   ServerGenerateThreadRecapInput,
   ServerLifecycleStreamEvent,
-  ServerProviderUpdateInput,
+  ServerListByokCatalogGroupsInput,
+  ServerListByokModelsInput,
+  ServerStartByokOAuthInput,
+  ServerLogoutByokOAuthInput,
+  ServerSetByokApiKeyInput,
+  ServerTestByokConnectionInput,
   ServerUpdateSettingsInput,
   ServerGetProviderUsageSnapshotInput,
   ServerListProviderUsageInput,
   ServerProviderStatusesUpdatedPayload,
   ServerSettingsUpdatedPayload,
   ServerStopLocalServerInput,
+  ServerProviderUpdateInput,
   ServerVoicePrewarmInput,
   ServerVoiceTranscriptionInput,
 } from "./server";
@@ -152,6 +158,9 @@ export const WS_METHODS = {
 
   // Studio methods
   studioListThreadOutputs: "studio.listThreadOutputs",
+
+  // Dialog methods
+  dialogsPickFolder: "dialogs.pickFolder",
 
   // Filesystem browse methods
   filesystemBrowse: "filesystem.browse",
@@ -208,6 +217,13 @@ export const WS_METHODS = {
   serverGetEnvironment: "server.getEnvironment",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverListByokProviders: "server.listByokProviders",
+  serverListByokCatalogGroups: "server.listByokCatalogGroups",
+  serverListByokModels: "server.listByokModels",
+  serverStartByokOAuth: "server.startByokOAuth",
+  serverLogoutByokOAuth: "server.logoutByokOAuth",
+  serverSetByokApiKey: "server.setByokApiKey",
+  serverTestByokConnection: "server.testByokConnection",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
   serverListExternalMcpIntegrations: "server.listExternalMcpIntegrations",
@@ -331,6 +347,9 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.subscribeProjectDevServerEvents, Schema.Struct({})),
   tagRequestBody(WS_METHODS.projectsProvisionFromGitHub, GitHubProjectProvisionInput),
 
+  // Dialogs
+  tagRequestBody(WS_METHODS.dialogsPickFolder, Schema.Struct({})),
+
   // Filesystem browse
   // Studio
   tagRequestBody(WS_METHODS.studioListThreadOutputs, StudioListThreadOutputsInput),
@@ -389,6 +408,13 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.serverGetEnvironment, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverGetSettings, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpdateSettings, ServerUpdateSettingsInput),
+  tagRequestBody(WS_METHODS.serverListByokProviders, Schema.Struct({})),
+  tagRequestBody(WS_METHODS.serverListByokCatalogGroups, ServerListByokCatalogGroupsInput),
+  tagRequestBody(WS_METHODS.serverListByokModels, ServerListByokModelsInput),
+  tagRequestBody(WS_METHODS.serverStartByokOAuth, ServerStartByokOAuthInput),
+  tagRequestBody(WS_METHODS.serverLogoutByokOAuth, ServerLogoutByokOAuthInput),
+  tagRequestBody(WS_METHODS.serverSetByokApiKey, ServerSetByokApiKeyInput),
+  tagRequestBody(WS_METHODS.serverTestByokConnection, ServerTestByokConnectionInput),
   tagRequestBody(WS_METHODS.serverRefreshProviders, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpdateProvider, ServerProviderUpdateInput),
   tagRequestBody(WS_METHODS.serverListExternalMcpIntegrations, Schema.Struct({})),

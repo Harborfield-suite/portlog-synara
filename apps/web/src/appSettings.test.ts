@@ -277,6 +277,7 @@ describe("resolveAppModelSelection", () => {
           kilo: [],
           opencode: [],
           pi: [],
+      openaiCompatible: [],
         },
         "galapagos-alpha",
       ),
@@ -297,6 +298,7 @@ describe("resolveAppModelSelection", () => {
           kilo: [],
           opencode: [],
           pi: [],
+      openaiCompatible: [],
         },
         "",
       ),
@@ -317,6 +319,7 @@ describe("resolveAppModelSelection", () => {
           kilo: [],
           opencode: [],
           pi: [],
+      openaiCompatible: [],
         },
         "GPT-5.3 Codex",
       ),
@@ -337,6 +340,7 @@ describe("resolveAppModelSelection", () => {
           kilo: [],
           opencode: [],
           pi: [],
+      openaiCompatible: [],
         },
         "sonnet",
       ),
@@ -357,6 +361,7 @@ describe("resolveAppModelSelection", () => {
           kilo: [],
           opencode: [],
           pi: [],
+      openaiCompatible: [],
         },
         "custom/selected-model",
       ),
@@ -519,6 +524,7 @@ describe("getProviderStartOptions", () => {
         openCodeServerUrl: "",
         piAgentDir: "",
         piBinaryPath: "",
+        openaiCompatibleBaseUrl: "",
       }),
     ).toEqual({
       claudeAgent: {
@@ -558,6 +564,7 @@ describe("getProviderStartOptions", () => {
         openCodeServerUrl: "",
         piAgentDir: "",
         piBinaryPath: "",
+        openaiCompatibleBaseUrl: "",
       }),
     ).toBeUndefined();
   });
@@ -580,6 +587,7 @@ describe("getProviderStartOptions", () => {
         openCodeServerUrl: "",
         piAgentDir: "",
         piBinaryPath: "pi",
+        openaiCompatibleBaseUrl: "",
       }),
     ).toBeUndefined();
   });
@@ -596,6 +604,7 @@ describe("provider-indexed custom model settings", () => {
     customKiloModels: ["kilo/kilo-auto/free"],
     customOpenCodeModels: ["openrouter/gpt-oss-120b"],
     customPiModels: ["anthropic/custom-pi"],
+    customOpenAICompatibleModels: ["openai/gpt-4o-byok"],
   } as const;
 
   it("exports one provider config per provider", () => {
@@ -609,6 +618,7 @@ describe("provider-indexed custom model settings", () => {
       "kilo",
       "opencode",
       "pi",
+      "openaiCompatible",
     ]);
   });
 
@@ -627,6 +637,7 @@ describe("provider-indexed custom model settings", () => {
     expect(getCustomModelsForProvider(settings, "kilo")).toEqual(["kilo/kilo-auto/free"]);
     expect(getCustomModelsForProvider(settings, "opencode")).toEqual(["openrouter/gpt-oss-120b"]);
     expect(getCustomModelsForProvider(settings, "pi")).toEqual(["anthropic/custom-pi"]);
+    expect(getCustomModelsForProvider(settings, "openaiCompatible")).toEqual(["openai/gpt-4o-byok"]);
   });
 
   it("reads default custom models for each provider", () => {
@@ -640,6 +651,7 @@ describe("provider-indexed custom model settings", () => {
       customKiloModels: ["kilo/default-auto"],
       customOpenCodeModels: ["openai/gpt-5"],
       customPiModels: ["anthropic/default-pi"],
+      customOpenAICompatibleModels: ["openai/default-byok"],
     } as const;
 
     expect(getDefaultCustomModelsForProvider(defaults, "codex")).toEqual(["default/codex-model"]);
@@ -655,6 +667,9 @@ describe("provider-indexed custom model settings", () => {
     expect(getDefaultCustomModelsForProvider(defaults, "kilo")).toEqual(["kilo/default-auto"]);
     expect(getDefaultCustomModelsForProvider(defaults, "opencode")).toEqual(["openai/gpt-5"]);
     expect(getDefaultCustomModelsForProvider(defaults, "pi")).toEqual(["anthropic/default-pi"]);
+    expect(getDefaultCustomModelsForProvider(defaults, "openaiCompatible")).toEqual([
+      "openai/default-byok",
+    ]);
   });
 
   it("patches custom models for codex", () => {
@@ -722,6 +737,7 @@ describe("provider-indexed custom model settings", () => {
       kilo: ["kilo/kilo-auto/free"],
       opencode: ["openrouter/gpt-oss-120b"],
       pi: ["anthropic/custom-pi"],
+      openaiCompatible: ["openai/gpt-4o-byok"],
     });
   });
 
@@ -778,6 +794,11 @@ describe("provider-indexed custom model settings", () => {
         " anthropic/claude-sonnet-4-5 ",
         "anthropic/custom-pi",
         "anthropic/custom-pi",
+      ],
+      customOpenAICompatibleModels: [
+        " openai/gpt-4o ",
+        "openai/gpt-4o-byok",
+        "openai/gpt-4o-byok",
       ],
     });
 

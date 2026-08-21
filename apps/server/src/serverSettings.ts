@@ -197,12 +197,15 @@ function omitProviderPasswords(patch: ServerSettingsPatch): ServerSettingsPatch 
   if (!patch.providers) return patch;
   const { serverPassword: _kiloPassword, ...kilo } = patch.providers.kilo ?? {};
   const { serverPassword: _openCodePassword, ...opencode } = patch.providers.opencode ?? {};
+  const { apiKey: _openaiCompatibleApiKey, ...openaiCompatible } =
+    patch.providers.openaiCompatible ?? {};
   return {
     ...patch,
     providers: {
       ...patch.providers,
       ...(patch.providers.kilo ? { kilo } : {}),
       ...(patch.providers.opencode ? { opencode } : {}),
+      ...(patch.providers.openaiCompatible ? { openaiCompatible } : {}),
     },
   };
 }
@@ -260,6 +263,7 @@ const makeServerSettings = Effect.gen(function* () {
     Effect.all({
       kilo: providerCredentials.isServerPasswordConfigured("kilo"),
       opencode: providerCredentials.isServerPasswordConfigured("opencode"),
+      openaiCompatible: providerCredentials.isOpenAICompatibleApiKeyConfigured(),
     }).pipe(
       Effect.map(
         (configured): ServerSettings => ({
@@ -273,6 +277,10 @@ const makeServerSettings = Effect.gen(function* () {
             opencode: {
               ...settings.providers.opencode,
               serverPasswordConfigured: configured.opencode,
+            },
+            openaiCompatible: {
+              ...settings.providers.openaiCompatible,
+              apiKeyConfigured: configured.openaiCompatible,
             },
           },
         }),
@@ -432,6 +440,23 @@ const makeServerSettings = Effect.gen(function* () {
             );
           }
         }
+        const openaiCompatibleApiKey = patch.providers?.openaiCompatible?.apiKey;
+        if (openaiCompatibleApiKey !== undefined) {
+          const catalogProviderId =
+            patch.providers?.openaiCompatible?.catalogProviderId?.trim() ||
+            current.providers.openaiCompatible.catalogProviderId.trim() ||
+            "openrouter";
+          yield* providerCredentials.replaceByokApiKey(catalogProviderId, openaiCompatibleApiKey).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ServerSettingsError({
+                  settingsPath,
+                  detail: `failed to update BYOK API key for ${catalogProviderId}`,
+                  cause,
+                }),
+            ),
+          );
+        }
         const normalized = yield* normalizeSettings(
           settingsPath,
           current,
@@ -477,6 +502,8 @@ const makeServerSettings = Effect.gen(function* () {
   } satisfies ServerSettingsShape;
 });
 
+// provideMerge so sibling layers (wsRpc BYOK handlers, adapters) share the same
+// host secret store instance instead of each constructing a private copy.
 export const ServerSettingsLive = Layer.effect(ServerSettingsService, makeServerSettings).pipe(
-  Layer.provide(ProviderCredentialsLive),
+  Layer.provideMerge(ProviderCredentialsLive),
 );

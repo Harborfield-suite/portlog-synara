@@ -287,6 +287,7 @@ import {
   buildProjectThreadTree,
   derivePinnedProjectIdsForSidebar,
   deriveSidebarProjectData,
+  deriveSidebarProjectStatusById,
   createSidebarThreadHoverAnchorId,
   findWorkspaceRootMatch,
   getPinnedThreadsForSidebar,
@@ -308,7 +309,6 @@ import {
   resolveSidebarThreadListPaging,
   DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY,
   resolveProjectEmptyState,
-  resolveProjectStatusIndicator,
   resolveSettingsBackTarget,
   type SettingsBackTarget,
   resolveSidebarNewThreadEnvMode,
@@ -3668,6 +3668,14 @@ export default function Sidebar() {
     }
     return byProjectId;
   }, [appSettings.sidebarThreadSortOrder, sidebarThreadsByProjectId]);
+  const projectStatusById = useMemo(
+    () =>
+      deriveSidebarProjectStatusById({
+        sortedSidebarThreadsByProjectId,
+        resolveThreadStatus: resolveThreadStatusForSidebar,
+      }),
+    [resolveThreadStatusForSidebar, sortedSidebarThreadsByProjectId],
+  );
   const handleProjectTitlePointerDownCapture = useCallback(() => {
     suppressProjectClickAfterDragRef.current = false;
   }, []);
@@ -3811,9 +3819,7 @@ export default function Sidebar() {
     };
     const activity = new Map<SpaceId | null, SpaceActivityTone>();
     for (const project of allStandardProjectsBase) {
-      const status = resolveProjectStatusIndicator(
-        (sidebarThreadsByProjectId.get(project.id) ?? []).map(resolveThreadStatusForSidebar),
-      );
+      const status = projectStatusById.get(project.id) ?? null;
       if (!status) continue;
       const tone: SpaceActivityTone =
         status.label === "Working" || status.label === "Connecting"
@@ -3828,7 +3834,7 @@ export default function Sidebar() {
       }
     }
     return activity;
-  }, [allStandardProjectsBase, resolveThreadStatusForSidebar, sidebarThreadsByProjectId]);
+  }, [allStandardProjectsBase, projectStatusById]);
   const standardProjectsBase = useMemo(
     () => allStandardProjectsBase.filter((project) => (project.spaceId ?? null) === activeSpaceId),
     [activeSpaceId, allStandardProjectsBase],
@@ -3858,6 +3864,7 @@ export default function Sidebar() {
         projects: standardProjects,
         sortedSidebarThreadsByProjectId,
         pinnedThreadIds,
+        projectStatusById,
         threadListExtraPagesByProjectCwd,
         normalizeProjectCwd: normalizeSidebarProjectThreadListCwd,
         activeSidebarThreadId: activeSidebarThreadId ?? undefined,
@@ -3870,8 +3877,8 @@ export default function Sidebar() {
       threadListExtraPagesByProjectCwd,
       pinnedThreadIds,
       sortedSidebarThreadsByProjectId,
+      projectStatusById,
       standardProjects,
-      resolveThreadStatusForSidebar,
     ],
   );
   const studioProjectSidebarDataById = useMemo<
@@ -3888,6 +3895,7 @@ export default function Sidebar() {
       projects: studioProjects,
       sortedSidebarThreadsByProjectId,
       pinnedThreadIds,
+      projectStatusById,
       threadListExtraPagesByProjectCwd,
       normalizeProjectCwd: normalizeSidebarProjectThreadListCwd,
       activeSidebarThreadId: activeSidebarThreadId ?? undefined,
@@ -3899,10 +3907,10 @@ export default function Sidebar() {
     activeSidebarThreadId,
     isOnStudio,
     threadListExtraPagesByProjectCwd,
+    projectStatusById,
     pinnedThreadIds,
     sortedSidebarThreadsByProjectId,
     studioProjects,
-    resolveThreadStatusForSidebar,
   ]);
   const surfaceProjects = isOnStudio ? studioProjects : standardProjects;
   const surfaceProjectSidebarDataById = isOnStudio

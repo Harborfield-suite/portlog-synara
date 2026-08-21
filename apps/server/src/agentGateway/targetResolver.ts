@@ -236,6 +236,10 @@ const PROVIDER_TARGET_OPTION_RULES = {
       }),
     },
   }),
+  openaiCompatible: {
+    primaryOptionKey: "",
+    options: {},
+  },
 } as const satisfies Record<ProviderKind, ProviderTargetOptionConfig>;
 
 function providerDefaultModel(provider: ProviderKind): string | null {
@@ -464,7 +468,10 @@ function providerOptionRuleSpec(
   provider: ProviderKind,
   optionId: string,
 ): ResolvedProviderTargetOptionRuleSpec | undefined {
-  const rule = PROVIDER_TARGET_OPTION_RULES[provider].options[optionId];
+  const options = PROVIDER_TARGET_OPTION_RULES[provider].options as Readonly<
+    Record<string, ProviderTargetOptionRuleSpec>
+  >;
+  const rule = options[optionId];
   return rule ? { key: optionId, ...rule } : undefined;
 }
 

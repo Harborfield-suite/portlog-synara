@@ -560,11 +560,15 @@ const SIDEBAR_GAP_CLASS =
 const SIDEBAR_INNER_CLASS = "app-sidebar-surface";
 
 function ChatRouteLayout() {
-  const isEditorView = useLocation({
-    select: (location) => (location.search as { view?: unknown }).view === "editor",
+  const isFullscreenChatView = useLocation({
+    select: (location) => {
+      const search = location.search;
+      const view = search && typeof search === "object" ? Reflect.get(search, "view") : undefined;
+      return view === "editor" || view === "model";
+    },
   });
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const resolvedSidebarOpen = isEditorView ? false : sidebarOpen;
+  const resolvedSidebarOpen = isFullscreenChatView ? false : sidebarOpen;
 
   // The thread sidebar always lives on the left; the right dock is a separate surface.
   const sidebarElement = (
@@ -591,7 +595,7 @@ function ChatRouteLayout() {
   // `data-sidebar-side` on the provider selects the seam geometry.
   const mainContentShell = (
     <div className="relative flex h-svh min-h-0 min-w-0 flex-1">
-      {isEditorView ? null : (
+      {isFullscreenChatView ? null : (
         <SidebarInstanceProvider side="left" resizable={THREAD_SIDEBAR_RESIZABLE}>
           <SidebarRail placement="content-seam" />
         </SidebarInstanceProvider>

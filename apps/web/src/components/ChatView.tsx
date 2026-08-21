@@ -98,6 +98,8 @@ import {
 } from "~/lib/providerDiscoveryReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import {
+  serverByokCatalogGroupsQueryOptions,
+  serverByokProvidersQueryOptions,
   serverConfigQueryOptions,
   serverQueryKeys,
   serverSettingsQueryOptions,
@@ -472,6 +474,7 @@ import { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import {
   AVAILABLE_PROVIDER_OPTIONS,
   ProviderModelPicker,
+  ProviderModelViewer,
   resolveProviderModelLabel,
 } from "./chat/ProviderModelPicker";
 import { ComposerModelEffortPicker } from "./chat/ComposerModelEffortPicker";
@@ -1089,7 +1092,7 @@ interface ChatViewProps {
   threadId: ThreadId;
   paneScopeId?: string;
   surfaceMode?: "single" | "split";
-  presentationMode?: "default" | "editor";
+  presentationMode?: "default" | "editor" | "model";
   isFocusedPane?: boolean;
   panelState?: SplitViewPanePanelState;
   onToggleDiffPanel?: () => void;
@@ -2170,11 +2173,13 @@ export default function ChatView({
       activeThread.messages.length > 0 ||
       activeThread.session !== null),
   );
-  const lockedProvider: ProviderKind | null = hasThreadStarted
-    ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
-    : null;
+  // Provider changes are composer drafts until the next turn; the server swaps
+  // the live session then and bootstraps the retained transcript.
   const selectedProvider: ProviderKind =
-    lockedProvider ?? selectedProviderByThreadId ?? threadProvider ?? settings.defaultProvider;
+    selectedProviderByThreadId ??
+    sessionProvider ??
+    threadProvider ??
+    settings.defaultProvider;
   const previousSelectedProviderRef = useRef<{
     threadId: ThreadId;
     provider: ProviderKind;
@@ -2203,6 +2208,7 @@ export default function ChatView({
       kilo: resolveHint("kilo"),
       opencode: resolveHint("opencode"),
       pi: resolveHint("pi"),
+      openaiCompatible: resolveHint("openaiCompatible"),
     };
   }, [
     activeProject?.defaultModelSelection,
@@ -2224,10 +2230,19 @@ export default function ChatView({
     selectedProviderRuntimeModelDiscoveryPending,
   } = useProviderModelCatalog({
     selectedProvider,
-    discoveryEnabled: isModelPickerOpen,
+    discoveryEnabled: isModelPickerOpen || presentationMode === "model",
     cwd: providerModelDiscoveryCwd,
     modelHintByProvider: composerModelHintByProvider,
     agentDiscoveryPolicy: "eager-core",
+  });
+  const byokDiscoveryEnabled = isModelPickerOpen || presentationMode === "model";
+  const byokCatalogGroupsQuery = useQuery({
+    ...serverByokCatalogGroupsQueryOptions(),
+    enabled: byokDiscoveryEnabled,
+  });
+  const byokProvidersQuery = useQuery({
+    ...serverByokProvidersQueryOptions(),
+    enabled: byokDiscoveryEnabled,
   });
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadId,
@@ -2342,10 +2357,8 @@ export default function ChatView({
         providerOrder: settings.providerOrder,
         hiddenProviders: settings.hiddenProviders,
         protectedProviders: [selectedProvider],
-        lockedProvider,
       }),
     [
-      lockedProvider,
       modelOptionsByProvider,
       selectedProvider,
       settings.hiddenProviders,
@@ -4248,12 +4261,30 @@ export default function ChatView({
     };
   }, [focusComposer, secondaryChromeReady, secondaryChromeThreadId]);
   // Keep the two composer picker menus mutually exclusive so shortcuts always open one surface.
-  const handleModelPickerOpenChange = useCallback((open: boolean) => {
-    setIsModelPickerOpen(open);
-    if (open) {
-      setIsTraitsPickerOpen(false);
-    }
-  }, []);
+  const handleModelPickerOpenChange = useCallback(
+    (open: boolean) => {
+      setIsModelPickerOpen(open);
+      if (open) {
+        setIsTraitsPickerOpen(false);
+        void navigate({
+          to: "/$threadId",
+          params: { threadId },
+          search: (previous) => ({ ...stripDiffSearchParams(previous), view: "model" }),
+        });
+      } else if (presentationMode === "model") {
+        void navigate({
+          to: "/$threadId",
+          params: { threadId },
+          search: (previous) => {
+            const { view: _view, editorFilePath: _editorFilePath, ...rest } =
+              stripDiffSearchParams(previous);
+            return rest;
+          },
+        });
+      }
+    },
+    [navigate, presentationMode, threadId],
+  );
   const handleTraitsPickerOpenChange = useCallback((open: boolean) => {
     setIsTraitsPickerOpen(open);
     if (open) {
@@ -6139,10 +6170,6 @@ export default function ChatView({
   const onProviderModelSelect = useCallback(
     async (provider: ProviderKind, model: ModelSlug) => {
       if (!activeThread) return;
-      if (lockedProvider !== null && provider !== lockedProvider) {
-        scheduleComposerFocus();
-        return;
-      }
       const resolvedModel = resolveCommittedProviderModel({
         selectedModel: model,
         availableOptions: modelOptionsByProvider[provider],
@@ -6190,7 +6217,6 @@ export default function ChatView({
     [
       activeThread,
       customModelsByProvider,
-      lockedProvider,
       modelOptionsByProvider,
       persistRuntimeModeChange,
       providerStatuses,
@@ -6200,6 +6226,16 @@ export default function ChatView({
       setComposerDraftModelSelectionAndSticky,
       setComposerDraftProviderModelOptions,
     ],
+  );
+  const onByokProviderModelChange = useCallback(
+    async (providerId: string, model: ModelSlug) => {
+      updateSettings({
+        openaiCompatibleCatalogProviderId: providerId,
+        openaiCompatibleDefaultModel: model,
+      });
+      await onProviderModelSelect("openaiCompatible", model);
+    },
+    [onProviderModelSelect, updateSettings],
   );
 
   useEffect(() => {
@@ -9250,7 +9286,7 @@ export default function ChatView({
   // let the measured-overflow loop demote again before paint if needed.
   const composerFooterModelLabel = resolveProviderModelLabel({
     provider: selectedProvider,
-    lockedProvider,
+    lockedProvider: null,
     model: selectedModelForPickerWithCustomFallback,
     modelOptionsByProvider,
   });
@@ -9316,12 +9352,13 @@ export default function ChatView({
         hideLabel={!composerFooterControlsPlan.showModelLabel}
         provider={selectedProvider}
         model={selectedModelForPickerWithCustomFallback}
-        lockedProvider={lockedProvider}
+        lockedProvider={null}
         providers={providerStatuses}
         modelOptionsByProvider={modelOptionsByProvider}
         loadingModelProviders={loadingModelProviders}
         hiddenProviders={settings.hiddenProviders}
         providerOrder={settings.providerOrder}
+        modelSelectionMode="model-first"
         onProviderModelChange={onProviderModelSelect}
         onSelectionCommitted={scheduleComposerFocus}
         open={isModelPickerOpen}
@@ -9352,12 +9389,13 @@ export default function ChatView({
       hideStatusLabel={!composerFooterControlsPlan.showTraitsLabel}
       provider={selectedProvider}
       model={selectedModelForPickerWithCustomFallback}
-      lockedProvider={lockedProvider}
+      lockedProvider={null}
       providers={providerStatuses}
       modelOptionsByProvider={modelOptionsByProvider}
       loadingModelProviders={loadingModelProviders}
       hiddenProviders={settings.hiddenProviders}
       providerOrder={settings.providerOrder}
+      modelSelectionMode="model-first"
       threadId={threadId}
       runtimeModel={selectedRuntimeModel}
       runtimeModels={runtimeModelsByProvider[selectedProvider]}
@@ -9963,6 +10001,9 @@ export default function ChatView({
       setComposerHighlightedItemId("review-target:changes");
     },
     setComposerDraftProviderModelOptions,
+    openModelPicker: () => {
+      handleModelPickerOpenChange(true);
+    },
     editorActions: slashEditorActions,
   });
 
@@ -10016,6 +10057,15 @@ export default function ChatView({
         return;
       }
       if (item.type === "provider-native-command") {
+        if (item.command.toLowerCase() === "model") {
+          handleModelPickerOpenChange(true);
+          applyComposerTriggerReplacement({
+            snapshot,
+            trigger,
+            base: "",
+          });
+          return;
+        }
         if (selectedProvider === "codex" && item.command.toLowerCase() === "review") {
           setComposerCommandPicker("review-target");
           setComposerHighlightedItemId("review-target:changes");
@@ -10083,6 +10133,7 @@ export default function ChatView({
       }
     },
     [
+      handleModelPickerOpenChange,
       applyComposerTriggerReplacement,
       scheduleComposerFocus,
       handleForkTargetSelection,
@@ -10580,6 +10631,18 @@ export default function ChatView({
     setDismissedRateLimitBannerKey(activeRateLimitBannerDismissalKey);
   }, [activeRateLimitBannerDismissalKey]);
 
+  const closeModelViewer = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => {
+        const { view: _view, editorFilePath: _editorFilePath, ...rest } =
+          stripDiffSearchParams(previous);
+        return rest;
+      },
+    });
+  }, [navigate, threadId]);
+
   // Empty state: no active thread
   if (!activeThread) {
     return (
@@ -10617,6 +10680,33 @@ export default function ChatView({
             <p className="text-sm">Select a thread or create a new one to get started.</p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (presentationMode === "model" && activeThread) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden text-foreground">
+        <ProviderModelViewer
+          provider={selectedProvider}
+          model={selectedModelForPickerWithCustomFallback}
+          lockedProvider={null}
+          providers={providerStatuses}
+          modelOptionsByProvider={modelOptionsByProvider}
+          loadingModelProviders={loadingModelProviders}
+          hiddenProviders={settings.hiddenProviders}
+          providerOrder={settings.providerOrder}
+          {...(byokCatalogGroupsQuery.data?.groups
+            ? { byokCatalogGroups: byokCatalogGroupsQuery.data.groups }
+            : {})}
+          {...(byokProvidersQuery.data?.providers
+            ? { byokProviders: byokProvidersQuery.data.providers }
+            : {})}
+          byokSelectedProviderId={settings.openaiCompatibleCatalogProviderId}
+          onProviderModelChange={onProviderModelSelect}
+          onByokProviderModelChange={onByokProviderModelChange}
+          onClose={closeModelViewer}
+        />
       </div>
     );
   }
@@ -10898,7 +10988,6 @@ export default function ChatView({
     onRemoveThreadMarker: handleRemoveThreadMarker,
     onRenameThreadMarker: handleRenameThreadMarker,
     onNotesChange: handleNotesChange,
-    onOpenEditorView: viewModeAction?.onClick ?? null,
     onClose: closeEnvironmentPanelAfterAction,
     onRegisterCommitAndPushTrigger,
   };
@@ -11548,6 +11637,7 @@ export default function ChatView({
           rightDockOpen={rightDockOpen}
           {...(onToggleRightDock ? { onToggleRightDock } : {})}
           environment={isEditorRail ? null : environmentHeaderState}
+          viewModeAction={isEditorRail ? null : viewModeAction}
           surfaceMode={surfaceMode}
           chatLayoutAction={
             surfaceMode === "single" && onSplitSurface

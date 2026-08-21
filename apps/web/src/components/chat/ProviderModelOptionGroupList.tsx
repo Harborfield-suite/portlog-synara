@@ -35,6 +35,7 @@ type ProviderModelOptionGroupListProps = {
   favoriteProvider: FavoriteModelProvider | null;
   favoriteModelSlugSet: ReadonlySet<string> | undefined;
   onToggleFavorite: (provider: FavoriteModelProvider, slug: string) => void;
+  disabled?: boolean;
   onAfterSelection?: () => void;
 };
 
@@ -46,6 +47,7 @@ function ProviderModelRadioItem(
     isFavorite: boolean;
     showProvenance: boolean;
     onToggleFavorite: (provider: FavoriteModelProvider, slug: string) => void;
+    disabled?: boolean;
     onAfterSelection?: () => void;
   }>,
 ) {
@@ -56,6 +58,7 @@ function ProviderModelRadioItem(
     isFavorite,
     showProvenance,
     onToggleFavorite,
+    disabled,
     onAfterSelection,
   } = props;
   const supportsFavorites = favoriteProvider !== null;
@@ -75,6 +78,7 @@ function ProviderModelRadioItem(
       value={modelOption.slug}
       {...(provenanceLabel ? { "aria-label": accessibleModelName } : {})}
       preserveChildLayout={preserveChildLayout}
+      disabled={disabled}
       className={costMultiplierLabel ? "grid-cols-[minmax(0,1fr)_auto]" : undefined}
       trailing={
         supportsFavorites ? (
@@ -191,6 +195,7 @@ export function ProviderModelOptionGroupList(props: ProviderModelOptionGroupList
             isFavorite={props.favoriteModelSlugSet?.has(modelOption.slug) ?? false}
             showProvenance={group.key === "__favorites__"}
             onToggleFavorite={props.onToggleFavorite}
+            {...(props.disabled !== undefined ? { disabled: props.disabled } : {})}
             {...(props.onAfterSelection ? { onAfterSelection: props.onAfterSelection } : {})}
           />
         ));

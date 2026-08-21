@@ -52,6 +52,7 @@ type ComposerModelEffortPickerProps = {
   loadingModelProviders?: Partial<Record<ProviderKind, boolean>>;
   hiddenProviders?: ReadonlyArray<ProviderKind>;
   providerOrder?: ReadonlyArray<ProviderKind>;
+  modelSelectionMode?: "provider-first" | "model-first";
   compact?: boolean;
   // Narrow-composer degradation: drop the model name (provider icon stays)
   // and/or the effort/status label; both remain available to assistive tech.
@@ -257,6 +258,7 @@ export function ComposerModelEffortPicker(props: ComposerModelEffortPickerProps)
                 : {})}
               {...(props.hiddenProviders ? { hiddenProviders: props.hiddenProviders } : {})}
               {...(props.providerOrder ? { providerOrder: props.providerOrder } : {})}
+              {...(props.modelSelectionMode ? { modelSelectionMode: props.modelSelectionMode } : {})}
               {...(props.disabled !== undefined ? { disabled: props.disabled } : {})}
               onProviderModelChange={props.onProviderModelChange}
               onAfterSelection={handleAfterModelSelection}

@@ -26,6 +26,7 @@ import {
   HistoryIcon,
   MessageCircleIcon,
   PanelRightCloseIcon,
+  LayoutSidebarIcon,
   PlusIcon,
   TerminalIcon,
   XIcon,
@@ -111,6 +112,11 @@ interface ChatHeaderProps {
   // Open-in-editor + git-actions + diff-toggle cluster into one Environment button that
   // drives the Environment panel; otherwise the legacy cluster is rendered.
   environment?: EnvironmentToggleState | null;
+  viewModeAction?: {
+    label: string;
+    active: boolean;
+    onClick: () => void;
+  } | null;
   chatLayoutAction?: {
     kind: "split" | "maximize";
     label: string;
@@ -526,6 +532,7 @@ export function ChatHeader({
   surfaceMode: surfaceModeProp,
   isSidechat: isSidechatProp,
   environment: environmentProp,
+  viewModeAction: viewModeActionProp,
   chatLayoutAction: chatLayoutActionProp,
   changeThreadAction: changeThreadActionProp,
   editorChatControls: editorChatControlsProp,
@@ -549,6 +556,7 @@ export function ChatHeader({
   const surfaceMode = surfaceModeProp ?? "single";
   const isSidechat = isSidechatProp ?? false;
   const environment = environmentProp ?? null;
+  const viewModeAction = viewModeActionProp ?? null;
   const chatLayoutAction = chatLayoutActionProp ?? null;
   const changeThreadAction = changeThreadActionProp ?? null;
   const editorChatControls = editorChatControlsProp ?? null;
@@ -864,6 +872,28 @@ export function ChatHeader({
               }
             />
             <TooltipPopup side="bottom">{changeThreadAction.label}</TooltipPopup>
+          </Tooltip>
+        ) : null}
+
+        {viewModeAction && !editorChatControls ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <ChatHeaderButton
+                  type="button"
+                  tone="outline"
+                  aria-pressed={viewModeAction.active}
+                  aria-label={viewModeAction.label}
+                  title={viewModeAction.label}
+                  onClick={viewModeAction.onClick}
+                  className="gap-1.5"
+                />
+              }
+            >
+              <LayoutSidebarIcon className="size-3.5" />
+              {!compact ? <span className="truncate font-normal">Editor</span> : null}
+            </TooltipTrigger>
+            <TooltipPopup side="bottom">{viewModeAction.label}</TooltipPopup>
           </Tooltip>
         ) : null}
 

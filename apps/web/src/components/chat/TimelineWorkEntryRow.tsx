@@ -56,6 +56,9 @@ import { LinkChipIcon } from "../LinkChipIcon";
 import { normalizeCompactToolLabel } from "./MessagesTimeline.logic";
 import { SynaraLogo } from "../SynaraLogo";
 import { ToolCallDetailsContent } from "./ToolCallDetailsDialog";
+import { PortLogEvidenceChip } from "../../portlog/PortLogEvidenceChip";
+import { PortLogRuleOutcomeChip } from "../../portlog/PortLogRuleOutcomeChip";
+import { resolvePortLogChromeFromWorkEntry } from "../../portlog/portlogHostBridge";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { DisclosureRegion } from "../ui/DisclosureRegion";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -76,7 +79,6 @@ import {
 } from "../../lib/toolCallLabel";
 import { formatLiveActivityMeta, useLiveActivityNow } from "../../lib/liveActivityPresentation";
 import { openWorkspaceFileReference, useWorkspaceFileOpener } from "../../lib/workspaceFileOpener";
-
 const TRANSCRIPT_DISCLOSURE_TRANSITION_MS = 220;
 const TRANSCRIPT_DISCLOSURE_CLEANUP_BUFFER_MS = 40;
 const WORK_ROW_MUTED_HOVER_TONE: Record<"tool-row" | "file-row", string> = {
@@ -556,6 +558,26 @@ export const TimelineWorkEntryRow = memo(function TimelineWorkEntryRow(props: {
           textFontSizePx={textFontSizePx}
           metaFontSizePx={chatMetaFontSizePx}
           {...(onOpenAutomation ? { onOpen: () => onOpenAutomation(automation.id) } : {})}
+        />
+      </div>
+    );
+  }
+
+  const portlogChrome = resolvePortLogChromeFromWorkEntry(workEntry);
+  if (portlogChrome?.kind === "evidence") {
+    return (
+      <div className={cn(compact ? "py-0.5" : "py-1")}>
+        <PortLogEvidenceChip label={portlogChrome.label} summary={portlogChrome.summary} />
+      </div>
+    );
+  }
+  if (portlogChrome?.kind === "rule") {
+    return (
+      <div className={cn(compact ? "py-0.5" : "py-1")}>
+        <PortLogRuleOutcomeChip
+          label={portlogChrome.label}
+          summary={portlogChrome.summary}
+          outcome={portlogChrome.outcome}
         />
       </div>
     );

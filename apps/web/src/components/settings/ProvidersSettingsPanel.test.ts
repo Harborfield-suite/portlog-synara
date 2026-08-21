@@ -5,9 +5,25 @@ import { type AppSettings, AppSettingsSchema } from "~/appSettings";
 import {
   createProviderInstallResetPatch,
   isProviderInstallSettingsDirty,
+  nativeOAuthProviderForProviderKind,
 } from "./ProvidersSettingsPanel";
 
 const defaults = AppSettingsSchema.makeUnsafe({});
+
+describe("nativeOAuthProviderForProviderKind", () => {
+  it("maps the native CLI providers to their OAuth identities", () => {
+    expect(nativeOAuthProviderForProviderKind("codex")).toBe("openai-codex");
+    expect(nativeOAuthProviderForProviderKind("claudeAgent")).toBe("anthropic");
+    expect(nativeOAuthProviderForProviderKind("cursor")).toBe("cursor");
+    expect(nativeOAuthProviderForProviderKind("antigravity")).toBe("google-antigravity");
+    expect(nativeOAuthProviderForProviderKind("grok")).toBe("xai-oauth");
+    expect(nativeOAuthProviderForProviderKind("droid")).toBe("droid");
+    expect(nativeOAuthProviderForProviderKind("kilo")).toBe("kilo");
+    expect(nativeOAuthProviderForProviderKind("opencode")).toBe("opencode");
+    expect(nativeOAuthProviderForProviderKind("pi")).toBeNull();
+    expect(nativeOAuthProviderForProviderKind("openaiCompatible")).toBeNull();
+  });
+});
 
 describe("isProviderInstallSettingsDirty", () => {
   it("covers every provider install text and boolean field", () => {
@@ -27,6 +43,9 @@ describe("isProviderInstallSettingsDirty", () => {
       { openCodeExperimentalWebSockets: true },
       { piBinaryPath: "/opt/pi" },
       { piAgentDir: "/tmp/pi-agent" },
+      { openaiCompatibleCatalogProviderId: "openai" },
+      { openaiCompatibleBaseUrl: "https://api.openai.com/v1" },
+      { openaiCompatibleDefaultModel: "gpt-4o" },
     ] satisfies ReadonlyArray<Partial<AppSettings>>;
 
     expect(isProviderInstallSettingsDirty(defaults, defaults)).toBe(false);
@@ -76,11 +95,16 @@ describe("createProviderInstallResetPatch", () => {
         "openCodeExperimentalWebSockets",
         "openCodeServerPassword",
         "openCodeServerUrl",
+        "openaiCompatibleApiKey",
+        "openaiCompatibleBaseUrl",
+        "openaiCompatibleCatalogProviderId",
+        "openaiCompatibleDefaultModel",
         "piAgentDir",
         "piBinaryPath",
       ].sort(),
     );
     expect(patch.kiloServerPassword).toBe("");
     expect(patch.openCodeServerPassword).toBe("");
+    expect(patch.openaiCompatibleApiKey).toBe("");
   });
 });

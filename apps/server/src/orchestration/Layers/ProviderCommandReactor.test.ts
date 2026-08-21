@@ -69,6 +69,7 @@ import {
 } from "../../provider/Services/ProviderService.ts";
 import { GitCore, type GitCoreShape } from "../../git/Services/GitCore.ts";
 import { TextGeneration, type TextGenerationShape } from "../../git/Services/TextGeneration.ts";
+import { durableTurnIdForMessage } from "../messageTurnId.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { TurnCheckpointCoordinatorLive } from "./TurnCheckpointCoordinator.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
@@ -77,6 +78,7 @@ import {
   classifyProviderAttemptOutcome,
   isSafeLegacyProviderBlocker,
   makeProviderCommandReactorLive,
+  providerSelectionUnavailable,
 } from "./ProviderCommandReactor.ts";
 import {
   OrchestrationEngineService,
@@ -104,6 +106,42 @@ const asApprovalRequestId = (value: string): ApprovalRequestId =>
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
+
+describe("provider selection admission", () => {
+  it("fails closed for unavailable or unauthenticated providers", () => {
+    expect(
+      providerSelectionUnavailable({
+        provider: "codex",
+        status: "error",
+        available: true,
+        authStatus: "unauthenticated",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+        message: "Sign in to Codex.",
+      }),
+    ).toBe("Sign in to Codex.");
+    expect(
+      providerSelectionUnavailable({
+        provider: "cursor",
+        status: "error",
+        available: false,
+        authStatus: "unknown",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toBe("Provider is unavailable.");
+  });
+
+  it("allows a healthy provider", () => {
+    expect(
+      providerSelectionUnavailable({
+        provider: "codex",
+        status: "ready",
+        available: true,
+        authStatus: "authenticated",
+        checkedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("legacy provider blocker recovery", () => {
   it("keeps process lifecycle failures uncertain", () => {
@@ -176,6 +214,7 @@ describe("ProviderCommandReactor", () => {
   const createdBaseDirs = new Set<string>();
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (scope) {
       await Effect.runPromise(Scope.close(scope, Exit.void));
     }
@@ -206,6 +245,9 @@ describe("ProviderCommandReactor", () => {
     readonly interruptTurn?: ProviderServiceShape["interruptTurn"];
     readonly commandEventTimeout?: Duration.Duration;
     readonly gatewayOperationId?: string;
+    readonly serverSettingsOverrides?: {
+      readonly textGenerationModelSelection?: ModelSelection;
+    };
   }) {
     const now = new Date().toISOString();
     const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "synara-reactor-"));
@@ -519,7 +561,13 @@ describe("ProviderCommandReactor", () => {
           generateThreadTitle,
         } as unknown as TextGenerationShape),
       ),
-      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(
+        ServerSettingsService.layerTest(
+          input?.serverSettingsOverrides === undefined
+            ? {}
+            : { textGenerationModelSelection: input.serverSettingsOverrides.textGenerationModelSelection },
+        ),
+      ),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
       Layer.provideMerge(OrchestrationEventDeliveryRepositoryLive),
@@ -563,6 +611,7 @@ describe("ProviderCommandReactor", () => {
     const gatewayOperations = await runtime.runPromise(
       Effect.service(AgentGatewayOperationRepository),
     );
+    const serverSettings = await runtime.runPromise(Effect.service(ServerSettingsService));
     scope = await Effect.runPromise(Scope.make("sequential"));
     let reactorStarted = false;
     const startReactor = async () => {
@@ -696,6 +745,7 @@ describe("ProviderCommandReactor", () => {
       startReactor,
       deliveryRepository,
       pendingInteractionRepository,
+      serverSettings,
       reserveGatewayOperation: (operationId: string) =>
         runtime.runPromise(
           gatewayOperations.reserve({
@@ -3359,6 +3409,40 @@ describe("ProviderCommandReactor", () => {
     // One scan rechecks the provider's live-turn race before dispatch; the
     // session ensure then performs the only full lookup needed for startup.
     expect(harness.listSessions).toHaveBeenCalledTimes(2);
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      turnId: durableTurnIdForMessage({
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        messageId: "user-message-1",
+      }),
+    });
+    expect(harness.steerTurn).not.toHaveBeenCalled();
+  });
+
+  it("preserves OpenAI-compatible model selections", async () => {
+    const harness = await createHarness({
+      threadModelSelection: { provider: "openaiCompatible", model: "native-model" },
+    });
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-native-openai-compatible"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("native-openai-message"),
+          role: "user",
+          text: "native adapter",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      modelSelection: { provider: "openaiCompatible", model: "native-model" },
+    });
   });
 
   it("routes subagent-thread turn starts to the parent session as steers", async () => {
@@ -6134,6 +6218,61 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
+  it("restarts the provider and bootstraps prior transcript context when switching providers", async () => {
+    const harness = await createHarness({
+      threadModelSelection: { provider: "codex", model: "gpt-5.5" },
+    });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-provider-switch-first-turn"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-switch-first"),
+          role: "user",
+          text: "Remember this context.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    harness.startSession.mockClear();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-provider-switch-second-turn"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-switch-second"),
+          role: "user",
+          text: "Continue with it.",
+          attachments: [],
+        },
+        modelSelection: { provider: "cursor", model: "auto" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      provider: "cursor",
+      modelSelection: { provider: "cursor", model: "auto" },
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      modelSelection: { provider: "cursor", model: "auto" },
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]?.input).toContain("Remember this context.");
+  });
+
   it("restarts an idle Claude session only for spawn-fixed model selection changes", async () => {
     const harness = await createHarness({
       threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-7" },
@@ -6894,7 +7033,7 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
-  it("rejects provider changes after a thread is already bound to a session provider", async () => {
+  it("restarts the provider session when the thread switches providers mid-chat", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
@@ -6939,29 +7078,22 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(async () => {
-      const thread = await readHarnessThread(harness);
-      return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
-        false
-      );
-    });
+    await waitFor(() => harness.startSession.mock.calls.length >= 2);
+    await waitFor(() => harness.sendTurn.mock.calls.length >= 2);
 
-    expect(harness.startSession.mock.calls.length).toBe(1);
-    expect(harness.sendTurn.mock.calls.length).toBe(1);
-    expect(harness.stopSession.mock.calls.length).toBe(0);
-
-    const thread = await readHarnessThread(harness);
-    expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.providerName).toBe("codex");
-    expect(thread?.session?.runtimeMode).toBe("approval-required");
-    expect(
-      thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
-    ).toMatchObject({
-      payload: {
-        detail: expect.stringContaining("cannot switch to 'claudeAgent'"),
+    expect(harness.startSession.mock.calls.at(-1)?.[1]).toMatchObject({
+      provider: "claudeAgent",
+      modelSelection: {
+        provider: "claudeAgent",
+        model: "claude-opus-4-6",
       },
     });
+
+    const thread = await readHarnessThread(harness);
+    expect(thread?.session?.providerName).toBe("claudeAgent");
+    expect(
+      thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed"),
+    ).toBe(false);
   });
 
   it("does not stop the active session when restart fails before rebind", async () => {

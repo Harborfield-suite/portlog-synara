@@ -1,9 +1,11 @@
 import type {
   ProviderKind,
   ServerConfig,
+  ServerListByokCatalogGroupsResult,
   ServerListProviderUsageInput,
   ServerProviderStatus,
-  ServerStopLocalServerInput,
+  ServerByokProviderIndexEntry,
+  ServerByokCatalogModel,
   ThreadId,
 } from "@synara/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
@@ -30,6 +32,9 @@ export const serverQueryKeys = {
     ["server", "profileTokenStats", utcOffsetMinutes] as const,
   studioThreadOutputs: (threadId: ThreadId | null) =>
     ["server", "studioThreadOutputs", threadId] as const,
+  byokProviders: () => ["server", "byokProviders"] as const,
+  byokCatalogGroups: (query: string) => ["server", "byokCatalogGroups", query] as const,
+  byokModels: (provider: string) => ["server", "byokModels", provider] as const,
 };
 
 export const serverMutationKeys = {
@@ -145,6 +150,43 @@ export function serverAuthSessionQueryOptions() {
       return api.server.getAuthSession();
     },
     staleTime: 15_000,
+  });
+}
+
+export function serverByokProvidersQueryOptions() {
+  return queryOptions({
+    queryKey: serverQueryKeys.byokProviders(),
+    queryFn: async (): Promise<{ providers: readonly ServerByokProviderIndexEntry[] }> => {
+      const api = ensureNativeApi();
+      return api.server.listByokProviders();
+    },
+    staleTime: 30_000,
+    refetchOnReconnect: true,
+  });
+}
+export function serverByokCatalogGroupsQueryOptions(query = "") {
+  const normalizedQuery = query.trim();
+  return queryOptions({
+    queryKey: serverQueryKeys.byokCatalogGroups(normalizedQuery),
+    queryFn: async (): Promise<ServerListByokCatalogGroupsResult> => {
+      const api = ensureNativeApi();
+      return api.server.listByokCatalogGroups({ query: normalizedQuery });
+    },
+    staleTime: 30_000,
+    refetchOnReconnect: true,
+  });
+}
+
+export function serverByokModelsQueryOptions(provider: string, enabled = true) {
+  const normalizedProvider = provider.trim();
+  return queryOptions({
+    queryKey: serverQueryKeys.byokModels(normalizedProvider),
+    queryFn: async (): Promise<{ provider: string; models: readonly ServerByokCatalogModel[] }> => {
+      const api = ensureNativeApi();
+      return api.server.listByokModels({ provider: normalizedProvider });
+    },
+    enabled: enabled && normalizedProvider.length > 0,
+    staleTime: 30_000,
   });
 }
 

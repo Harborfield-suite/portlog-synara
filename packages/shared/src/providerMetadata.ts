@@ -92,13 +92,40 @@ export const PROVIDER_DESCRIPTORS = [
     displayName: PROVIDER_DISPLAY_NAMES.pi,
     available: true,
     supportsNativeTurnSteering: true,
-    usage: null,
+    usage: {
+      signInCommand: "pi",
+      learnMoreHref: "https://pi.dev/docs/latest/settings",
+    },
+  },
+  {
+    kind: "openaiCompatible",
+    displayName: PROVIDER_DISPLAY_NAMES.openaiCompatible,
+    available: true,
+    supportsNativeTurnSteering: false,
+    usage: {
+      signInCommand: "Settings → Providers → BYOK (API key)",
+      learnMoreHref: "https://openrouter.ai/docs",
+    },
   },
 ] as const satisfies readonly ProviderDescriptor[];
 
 export const PROVIDER_DESCRIPTOR_BY_KIND = Object.fromEntries(
   PROVIDER_DESCRIPTORS.map((descriptor) => [descriptor.kind, descriptor]),
 ) as Record<ProviderKind, (typeof PROVIDER_DESCRIPTORS)[number]>;
+
+const OAUTH_SETUP_PROVIDERS: ReadonlySet<ProviderKind> = new Set([
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "antigravity",
+  "grok",
+  "droid",
+  "kilo",
+  "opencode",
+]);
+
+export const providerSupportsOAuthSetup = (kind: ProviderKind): boolean =>
+  OAUTH_SETUP_PROVIDERS.has(kind);
 
 // Accepts plain strings so projection-sourced provider names can be checked
 // without casts; unknown providers are simply not steerable.

@@ -140,6 +140,19 @@ import type {
   ServerListProviderUsageInput,
   ServerListProviderUsageResult,
   ServerGetSettingsResult,
+  ServerListByokCatalogGroupsInput,
+  ServerListByokCatalogGroupsResult,
+  ServerListByokModelsInput,
+  ServerListByokModelsResult,
+  ServerListByokProvidersResult,
+  ServerStartByokOAuthInput,
+  ServerStartByokOAuthResult,
+  ServerLogoutByokOAuthInput,
+  ServerLogoutByokOAuthResult,
+  ServerSetByokApiKeyInput,
+  ServerSetByokApiKeyResult,
+  ServerTestByokConnectionInput,
+  ServerTestByokConnectionResult,
   ServerListLocalServersResult,
   ServerListWorktreesResult,
   ServerProviderUpdateInput,
@@ -476,6 +489,21 @@ export interface SynaraStorageSnapshot {
   readonly entries: Readonly<Record<string, string>>;
 }
 
+export interface DesktopDexpiImportInput {
+  readonly sourcePath?: string;
+  readonly cwd?: string;
+}
+
+export interface DesktopDexpiImportResult {
+  readonly sourcePath: string;
+  readonly sourceFilename: string;
+  readonly sourceSha256: string;
+  readonly svgPath: string;
+  readonly scenePath: string;
+  readonly diagnosticsPath: string;
+  readonly cached: boolean;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   /**
@@ -540,6 +568,9 @@ export interface DesktopBridge {
   storageMigration: {
     readSnapshot: () => SynaraStorageSnapshot | null;
     acknowledgeSnapshot: () => Promise<void>;
+  };
+  dexpi: {
+    importSource: (input?: DesktopDexpiImportInput) => Promise<DesktopDexpiImportResult | null>;
   };
   server?: {
     transcribeVoice: (
@@ -700,6 +731,17 @@ export interface NativeApi {
       input: ExternalMcpRefreshPairingInput,
     ) => Promise<ExternalMcpCreateIntegrationResult>;
     refreshProviders: () => Promise<ServerRefreshProvidersResult>;
+    listByokProviders: () => Promise<ServerListByokProvidersResult>;
+    startByokOAuth: (input: ServerStartByokOAuthInput) => Promise<ServerStartByokOAuthResult>;
+    logoutByokOAuth: (input: ServerLogoutByokOAuthInput) => Promise<ServerLogoutByokOAuthResult>;
+    listByokCatalogGroups: (
+      input: ServerListByokCatalogGroupsInput,
+    ) => Promise<ServerListByokCatalogGroupsResult>;
+    listByokModels: (input: ServerListByokModelsInput) => Promise<ServerListByokModelsResult>;
+    setByokApiKey: (input: ServerSetByokApiKeyInput) => Promise<ServerSetByokApiKeyResult>;
+    testByokConnection: (
+      input: ServerTestByokConnectionInput,
+    ) => Promise<ServerTestByokConnectionResult>;
     updateProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdateResult>;
     listWorktrees: () => Promise<ServerListWorktreesResult>;
     listLocalServers: () => Promise<ServerListLocalServersResult>;

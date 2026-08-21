@@ -5,6 +5,7 @@
 import {
   PROVIDER_DISPLAY_NAMES,
   type ProviderKind,
+  type ServerByokOAuthProvider,
   type ServerProviderStatus,
   type ServerSettings,
 } from "@synara/contracts";
@@ -64,6 +65,7 @@ import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { DebouncedSettingTextInput } from "./DebouncedSettingTextInput";
+import { ByokModelCatalogPanel } from "./ByokModelCatalogPanel";
 import { SettingResetButton, useSettingsRestoreSignal } from "./SettingControls";
 import { SettingsListRow, SettingsRow, SettingsSection } from "./SettingsPanelPrimitives";
 
@@ -81,11 +83,18 @@ type ProviderInstallTextKey =
   | "openCodeBinaryPath"
   | "openCodeServerUrl"
   | "piBinaryPath"
-  | "piAgentDir";
-type ProviderInstallPasswordKey = "kiloServerPassword" | "openCodeServerPassword";
+  | "piAgentDir"
+  | "openaiCompatibleBaseUrl"
+  | "openaiCompatibleCatalogProviderId"
+  | "openaiCompatibleDefaultModel";
+type ProviderInstallPasswordKey =
+  | "kiloServerPassword"
+  | "openCodeServerPassword"
+  | "openaiCompatibleApiKey";
 type ProviderInstallPasswordConfiguredKey =
   | "kiloServerPasswordConfigured"
-  | "openCodeServerPasswordConfigured";
+  | "openCodeServerPasswordConfigured"
+  | "openaiCompatibleApiKeyConfigured";
 type ProviderInstallBooleanKey = "openCodeExperimentalWebSockets";
 
 type ProviderInstallTextField = {
@@ -118,6 +127,37 @@ type ProviderInstallSettings = {
   readonly docs: ReadonlyArray<{ readonly label: string; readonly href: string }>;
   readonly fields: readonly ProviderInstallField[];
 };
+
+type NativeOAuthProvider = ServerByokOAuthProvider;
+
+export function nativeOAuthProviderForProviderKind(
+  provider: ProviderKind,
+): NativeOAuthProvider | null {
+  switch (provider) {
+    case "codex":
+      return "openai-codex";
+    case "claudeAgent":
+      return "anthropic";
+    case "cursor":
+      return "cursor";
+    case "antigravity":
+      return "google-antigravity";
+    case "grok":
+      return "xai-oauth";
+    case "droid":
+      return "droid";
+    case "kilo":
+      return "kilo";
+    case "opencode":
+      return "opencode";
+    default:
+      return null;
+  }
+}
+
+function supportsOAuthLogout(provider: NativeOAuthProvider): boolean {
+  return provider === "openai-codex" || provider === "cursor";
+}
 
 const PROVIDER_VISIBILITY_OPTIONS: ReadonlyArray<{ provider: ProviderKind; title: string }> =
   PROVIDER_DESCRIPTORS.map((descriptor) => ({
@@ -372,6 +412,51 @@ const PROVIDER_INSTALL_SETTINGS: readonly ProviderInstallSettings[] = [
         label: "Pi agent directory",
         placeholder: "Pi agent directory",
         description: "Optional custom Pi agent directory for auth, models, skills, and commands.",
+      },
+    ],
+  },
+  {
+    provider: "openaiCompatible",
+    docs: [
+      { label: "OpenRouter", href: "https://openrouter.ai/docs" },
+      { label: "OpenAI API", href: "https://platform.openai.com/docs/api-reference" },
+    ],
+    fields: [
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleCatalogProviderId",
+        label: "Catalogue provider id",
+        placeholder: "openrouter",
+        description: (
+          <>
+            models.dev / OMP provider id (openrouter, openai, anthropic, google, …). Featured
+            defaults start at <code>openrouter</code>.
+          </>
+        ),
+      },
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleBaseUrl",
+        label: "Base URL override",
+        placeholder: "https://openrouter.ai/api/v1",
+        description:
+          "Optional. Leave blank to use the catalogue base URL for the selected provider.",
+      },
+      {
+        kind: "password",
+        settingsKey: "openaiCompatibleApiKey",
+        configuredKey: "openaiCompatibleApiKeyConfigured",
+        label: "API key",
+        placeholder: "sk-… or OpenRouter key",
+        description: "Bring-your-own key. Cleared from the browser after save; stored server-side only.",
+      },
+      {
+        kind: "text",
+        settingsKey: "openaiCompatibleDefaultModel",
+        label: "Default model",
+        placeholder: "openai/gpt-4o",
+        description:
+          "Model id from the catalogue (fetched via server.listByokModels) or a custom slug.",
       },
     ],
   },
@@ -643,6 +728,8 @@ function ProviderToolRow(props: {
   updatingProviders: ReadonlySet<ProviderKind>;
   onOpenChange: (open: boolean) => void;
   onUpdate: (provider: ProviderKind) => void;
+  oauthBusyProvider: NativeOAuthProvider | null;
+  onOAuthAction: (provider: NativeOAuthProvider, action: "login" | "logout") => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
 }) {
   const title = PROVIDER_DISPLAY_NAMES[props.config.provider];
@@ -681,6 +768,9 @@ function ProviderToolRow(props: {
     ? shouldOfferProviderUpdateAction(props.providerStatus) &&
       !isProviderLatestVersionKnowable(props.providerStatus)
     : false;
+  const oauthProvider = nativeOAuthProviderForProviderKind(props.config.provider);
+  const oauthBusy = oauthProvider !== null && props.oauthBusyProvider === oauthProvider;
+  const oauthConnected = props.providerStatus?.authStatus === "authenticated";
 
   return (
     <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
@@ -725,6 +815,36 @@ function ProviderToolRow(props: {
           <div className="border-t border-border/70 bg-muted/20 px-3 py-3">
             <div className="space-y-3">
               <ProviderDocsLinks docs={props.config.docs} />
+              {oauthProvider ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 bg-background/60 px-3 py-2">
+                  <div className="min-w-0 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">OAuth access</span>
+                    <span className="ml-2">{oauthConnected ? "Authenticated" : "Not authenticated"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={props.oauthBusyProvider !== null}
+                      onClick={() => props.onOAuthAction(oauthProvider, "login")}
+                    >
+                      {oauthBusy ? "Waiting…" : "Log in with OAuth"}
+                    </Button>
+                    {supportsOAuthLogout(oauthProvider) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={props.oauthBusyProvider !== null || !oauthConnected}
+                        onClick={() => props.onOAuthAction(oauthProvider, "logout")}
+                      >
+                        {oauthBusy ? "Waiting…" : "Log out"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               {showProviderUpdateStatus && updateAdvisory?.status === "behind_latest" ? (
                 <div className="text-xs text-muted-foreground">
                   {updateAdvisory.canUpdate && updateAdvisory.updateCommand ? (
@@ -788,6 +908,7 @@ export function ProvidersSettingsPanel({
   const [updatingProviders, setUpdatingProviders] = useState<ReadonlySet<ProviderKind>>(
     () => new Set(),
   );
+  const [oauthBusyProvider, setOauthBusyProvider] = useState<NativeOAuthProvider | null>(null);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
     [settings.hiddenProviders],
@@ -850,6 +971,29 @@ export function ProvidersSettingsPanel({
       updateSettings({ providerOrder: arrayMove([...settings.providerOrder], fromIndex, toIndex) });
     },
     [settings.providerOrder, updateSettings],
+  );
+
+  const runProviderOAuth = useCallback(
+    async (provider: NativeOAuthProvider, action: "login" | "logout") => {
+      if (oauthBusyProvider !== null) return;
+      setOauthBusyProvider(provider);
+      try {
+        const api = ensureNativeApi();
+        if (action === "login") await api.server.startByokOAuth({ provider });
+        else await api.server.logoutByokOAuth({ provider });
+        await api.server.refreshProviders();
+        await queryClient.invalidateQueries({ queryKey: serverQueryKeys.config() });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `${action === "login" ? "OAuth login" : "OAuth logout"} failed`,
+          description: error instanceof Error ? error.message : "The OAuth action failed.",
+        });
+      } finally {
+        setOauthBusyProvider(null);
+      }
+    },
+    [oauthBusyProvider, queryClient],
   );
 
   const runProviderUpdate = useCallback(
@@ -1042,6 +1186,8 @@ export function ProvidersSettingsPanel({
         </SettingsRow>
       </SettingsSection>
 
+      <ByokModelCatalogPanel settings={settings} updateSettings={updateSettings} />
+
       <div>
         <SettingsSection title="Provider tools">
           <SettingsRow
@@ -1086,6 +1232,8 @@ export function ProvidersSettingsPanel({
                       }))
                     }
                     onUpdate={(provider) => void runProviderUpdate(provider)}
+                    oauthBusyProvider={oauthBusyProvider}
+                    onOAuthAction={(provider, action) => void runProviderOAuth(provider, action)}
                     updateSettings={updateSettings}
                   />
                 ))}

@@ -1,7 +1,18 @@
 import { TurnId } from "@synara/contracts";
 import { describe, expect, it } from "vitest";
 
-import { resolveStableMessageTurnId } from "./messageTurnId.ts";
+import { durableTurnIdForMessage, resolveStableMessageTurnId } from "./messageTurnId.ts";
+
+describe("durableTurnIdForMessage", () => {
+  it("is stable for retries of the same thread message", () => {
+    expect(
+      durableTurnIdForMessage({ threadId: "thread-1" as never, messageId: "message-1" }),
+    ).toBe("synara-turn:thread-1:message-1");
+    expect(
+      durableTurnIdForMessage({ threadId: "thread-1" as never, messageId: "message-1" }),
+    ).toBe("synara-turn:thread-1:message-1");
+  });
+});
 
 describe("resolveStableMessageTurnId", () => {
   it("keeps the existing turn id when a later event carries a different one", () => {

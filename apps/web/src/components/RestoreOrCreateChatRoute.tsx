@@ -8,7 +8,7 @@
 
 import { ThreadId } from "@synara/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { SplashScreen } from "./SplashScreen";
 import {
@@ -40,12 +40,15 @@ export type RestoreRouteResolver = (input: RestoreRouteResolverInput) => LastThr
 export function RestoreOrCreateChatRoute({
   resolveRestoreRoute,
   createFreshChat,
+  renderEmptyContent,
 }: {
   // Surface-specific policy for picking the thread route to restore (e.g. the last-visited route
   // for home chats, the latest Studio thread or draft for Studio). The remembered-route recovery
   // below still keys off the total thread count, which is shared across surfaces.
   readonly resolveRestoreRoute: RestoreRouteResolver;
   readonly createFreshChat: () => Promise<StartContainerChatResult>;
+  /** Optional product-owned landing surface shown instead of creating a fresh chat. */
+  readonly renderEmptyContent?: (() => ReactNode) | undefined;
 }) {
   const navigate = useNavigate();
   const threadsHydrated = useStore((store) => store.threadsHydrated);
@@ -57,6 +60,7 @@ export function RestoreOrCreateChatRoute({
   );
   const [attempt, setAttempt] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [emptyContentReady, setEmptyContentReady] = useState(false);
   const [emptyRestoreRecoveryState, setEmptyRestoreRecoveryState] =
     useState<EmptyRouteRestoreRecoveryState>("idle");
   const mountedRef = useRef(true);
@@ -147,6 +151,10 @@ export function RestoreOrCreateChatRoute({
         return;
       }
 
+      if (renderEmptyContent) {
+        setEmptyContentReady(true);
+        return;
+      }
       if (cancelled || createFreshChatInFlightRef.current) {
         return;
       }
@@ -169,6 +177,7 @@ export function RestoreOrCreateChatRoute({
     attempt,
     createFreshChat,
     emptyRestoreRecoveryState,
+    renderEmptyContent,
     navigate,
     resolveRestoreRoute,
     splitViewIds,
@@ -176,6 +185,10 @@ export function RestoreOrCreateChatRoute({
     threadIds.length,
     threadsHydrated,
   ]);
+
+  if (emptyContentReady && renderEmptyContent && errorMessage === null) {
+    return <>{renderEmptyContent()}</>;
+  }
 
   return (
     <SplashScreen

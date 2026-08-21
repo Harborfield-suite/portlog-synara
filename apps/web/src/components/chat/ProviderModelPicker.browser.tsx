@@ -1,9 +1,19 @@
-import { type ModelSlug, type ProviderKind, type ServerProviderStatus } from "@synara/contracts";
+import {
+  type ModelSlug,
+  type ProviderKind,
+  type ServerByokCatalogGroup,
+  type ServerProviderStatus,
+} from "@synara/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { ProviderModelPicker } from "./ProviderModelPicker";
+import {
+  ProviderModelPicker,
+  AVAILABLE_PROVIDER_OPTIONS,
+  ProviderModelViewer,
+  resolveProviderPickerLabel,
+} from "./ProviderModelPicker";
 import type { ProviderModelOption } from "../../providerModelOptions";
 import { FAVORITE_MODEL_STORAGE_KEYS } from "../../lib/modelFavorites";
 
@@ -67,6 +77,14 @@ const MODEL_OPTIONS_BY_PROVIDER = {
     {
       slug: "Gemini 3.5 Flash",
       name: "Gemini 3.5 Flash",
+    },
+  ],
+  openaiCompatible: [
+    {
+      slug: "openai/gpt-4o",
+      name: "GPT-4o",
+      upstreamProviderId: "openrouter",
+      upstreamProviderName: "OpenRouter",
     },
   ],
 } as const satisfies Record<ProviderKind, ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>>;
@@ -145,18 +163,23 @@ const PI_FAVORITE_SORT_MODELS = [
   },
 ] satisfies ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>;
 
-async function mountPicker(props: {
+type PickerHarnessProps = {
   provider: ProviderKind;
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProviderStatus>;
   loadingModelProviders?: Partial<Record<ProviderKind, boolean>>;
+  modelSelectionMode?: "provider-first" | "model-first";
   onSelectionCommitted?: () => void;
   modelOptionsByProvider?: Record<
     ProviderKind,
     ReadonlyArray<ProviderModelOption & { slug: ModelSlug }>
   >;
-}) {
+  byokCatalogGroups?: ReadonlyArray<ServerByokCatalogGroup>;
+  byokSelectedProviderId?: string;
+};
+
+async function mountPicker(props: PickerHarnessProps) {
   const host = document.createElement("div");
   document.body.append(host);
   const onProviderModelChange = vi.fn();
@@ -169,6 +192,7 @@ async function mountPicker(props: {
       {...(props.loadingModelProviders
         ? { loadingModelProviders: props.loadingModelProviders }
         : {})}
+      {...(props.modelSelectionMode ? { modelSelectionMode: props.modelSelectionMode } : {})}
       {...(props.providers ? { providers: props.providers } : {})}
       {...(props.onSelectionCommitted ? { onSelectionCommitted: props.onSelectionCommitted } : {})}
       onProviderModelChange={onProviderModelChange}
@@ -178,6 +202,34 @@ async function mountPicker(props: {
 
   return {
     onProviderModelChange,
+    cleanup: async () => {
+      await screen.unmount();
+      host.remove();
+    },
+  };
+}
+
+async function mountViewer(props: PickerHarnessProps) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const screen = await render(
+    <ProviderModelViewer
+      provider={props.provider}
+      model={props.model}
+      lockedProvider={props.lockedProvider}
+      modelOptionsByProvider={props.modelOptionsByProvider ?? MODEL_OPTIONS_BY_PROVIDER}
+      {...(props.providers ? { providers: props.providers } : {})}
+      {...(props.byokCatalogGroups ? { byokCatalogGroups: props.byokCatalogGroups } : {})}
+      {...(props.byokSelectedProviderId
+        ? { byokSelectedProviderId: props.byokSelectedProviderId }
+        : {})}
+      onProviderModelChange={vi.fn()}
+      onClose={vi.fn()}
+    />,
+    { container: host },
+  );
+
+  return {
     cleanup: async () => {
       await screen.unmount();
       host.remove();
@@ -637,6 +689,206 @@ describe("ProviderModelPicker", () => {
     }
   });
 
+  it("puts configured providers before alphabetized unconfigured providers", async () => {
+    const mounted = await mountViewer({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      providers: AVAILABLE_PROVIDER_OPTIONS.map(({ value }) => {
+        const configured = value === "codex" || value === "cursor";
+        return {
+          provider: value,
+          status: configured ? ("ready" as const) : ("error" as const),
+          available: configured,
+          authStatus: configured ? ("authenticated" as const) : ("unauthenticated" as const),
+          checkedAt: "2026-01-01T00:00:00.000Z",
+        };
+      }),
+    });
+
+    try {
+      const providerLabels = Array.from(
+        document.querySelectorAll(".model-picker-frame-provider-button"),
+        (button) => button.textContent?.trim(),
+      );
+      expect(providerLabels.slice(1, 4)).toEqual(["Codex2", "Cursor2", "Antigravity1"]);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("lists curated BYOK providers beside runtime providers", async () => {
+    const mounted = await mountViewer({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      byokCatalogGroups: [
+        {
+          id: "cerebras",
+          name: "Cerebras",
+          doc: "https://cerebras.ai",
+          models: [
+            {
+              id: "llama-4-scout",
+              name: "Llama 4 Scout",
+              qualifiedId: "cerebras/llama-4-scout",
+              context: 128000,
+              reasoning: false,
+              released: "2026-01-01",
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      await expect
+        .element(page.getByRole("button", { name: /Cerebras.*1/ }))
+        .toBeInTheDocument();
+      await page.getByRole("button", { name: /Cerebras.*1/ }).click();
+      await expect.element(page.getByRole("heading", { name: "Cerebras" })).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows provider detail and setup guidance in the model viewer", async () => {
+    const mounted = await mountViewer({
+      provider: "claudeAgent",
+      model: "claude-opus-4-6",
+      lockedProvider: null,
+      providers: [
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await expect.element(page.getByRole("heading", { name: "Claude" })).toBeInTheDocument();
+      await expect
+        .element(page.getByText("Claude has no credentials configured"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByRole("button", { name: "Open provider settings ↗" }))
+        .toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("labels unavailable OAuth providers as setup targets", async () => {
+    const mounted = await mountPicker({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      providers: [
+        {
+          provider: "codex",
+          status: "ready",
+          available: true,
+          authStatus: "authenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+        {
+          provider: "antigravity",
+          status: "error",
+          available: false,
+          authStatus: "unknown",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+      await expect.element(page.getByText("Set up")).toBeInTheDocument();
+      await expect.element(page.getByText("Unavailable")).not.toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("labels the BYOK picker with its selected curated provider", () => {
+    expect(
+      resolveProviderPickerLabel("openaiCompatible", MODEL_OPTIONS_BY_PROVIDER.openaiCompatible),
+    ).toBe("OpenRouter");
+  });
+
+  it("keeps unavailable model rows visible but disabled in model-first mode", async () => {
+    const mounted = await mountPicker({
+      provider: "codex",
+      model: "gpt-5-codex",
+      lockedProvider: null,
+      modelSelectionMode: "model-first",
+      providers: [
+        {
+          provider: "codex",
+          status: "ready",
+          available: true,
+          authStatus: "authenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      const unavailableModel = page.getByRole("menuitemradio", {
+        name: "Claude Opus 4.6",
+      });
+      await expect.element(unavailableModel).toBeInTheDocument();
+      await expect.element(unavailableModel).toHaveAttribute("aria-disabled", "true");
+      await expect.element(unavailableModel).toHaveTextContent("Sign in");
+      expect(mounted.onProviderModelChange).not.toHaveBeenCalled();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps a locked unavailable provider's models visible but disabled", async () => {
+    const mounted = await mountPicker({
+      provider: "claudeAgent",
+      model: "claude-opus-4-6",
+      lockedProvider: "claudeAgent",
+      providers: [
+        {
+          provider: "claudeAgent",
+          status: "error",
+          available: false,
+          authStatus: "unauthenticated",
+          checkedAt: "2026-04-10T10:00:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      const unavailableModel = page.getByRole("menuitemradio", {
+        name: "Claude Sonnet 4.6",
+      });
+      await expect.element(unavailableModel).toBeInTheDocument();
+      await expect.element(unavailableModel).toHaveAttribute("aria-disabled", "true");
+      await expect.element(page.getByRole("status")).toHaveTextContent("Sign in");
+      expect(mounted.onProviderModelChange).not.toHaveBeenCalled();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("does not make providers selectable before live status is known", async () => {
     const mounted = await mountPicker({
       provider: "codex",
@@ -699,6 +951,25 @@ describe("ProviderModelPicker", () => {
 
       await expect.element(page.getByText("Sign in")).not.toBeInTheDocument();
       await expect.element(page.getByText("Unavailable")).not.toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("uses the selected model brand in the collapsed trigger", async () => {
+    const mounted = await mountPicker({
+      provider: "opencode",
+      model: "openai/gpt-5",
+      lockedProvider: "opencode",
+    });
+
+    try {
+      const trigger = Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("GPT-5"),
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger?.querySelector("[data-slot=\"central-icon\"]")).toBeNull();
+      expect(trigger?.querySelector("svg")).not.toBeNull();
     } finally {
       await mounted.cleanup();
     }

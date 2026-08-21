@@ -166,8 +166,6 @@ export interface EnvironmentPanelProps {
   onRenameThreadMarker: (markerId: ThreadMarkerId, label: string | null) => void;
   /** Persist updated notes for the given thread (bound per section instance, not the active thread). */
   onNotesChange: (threadId: ThreadId, notes: string) => Promise<void>;
-  /** Open the in-app editor workspace view (the Editor section's default first row). */
-  onOpenEditorView?: (() => void) | null;
   /** Dismiss the panel overlay — invoked after actions that open the dock. */
   onClose: () => void;
   /** Registers the panel's "Commit and Push" row as the target for the global shortcut. */
@@ -247,7 +245,6 @@ export function EnvironmentPanel({
   onRemoveThreadMarker,
   onRenameThreadMarker,
   onNotesChange,
-  onOpenEditorView: onOpenEditorViewProp,
   onClose,
   onRegisterCommitAndPushTrigger,
 }: EnvironmentPanelProps) {
@@ -256,7 +253,6 @@ export function EnvironmentPanel({
   const studioFolderPath = studioFolderPathProp ?? null;
   const diffDisabledReason = diffDisabledReasonProp ?? null;
   const recap = recapProp ?? null;
-  const onOpenEditorView = onOpenEditorViewProp ?? null;
   const navigate = useNavigate();
   const { settings } = useAppSettings();
   const { additions, deletions, hasChanges } = diffTotals;
@@ -419,14 +415,6 @@ export function EnvironmentPanel({
           keybindings={keybindings}
           availableEditors={availableEditors}
           openInTarget={openInTarget}
-          {...(onOpenEditorView
-            ? {
-                onOpenEditorView: () => {
-                  onOpenEditorView();
-                  onClose();
-                },
-              }
-            : {})}
         />
       ) : null}
 

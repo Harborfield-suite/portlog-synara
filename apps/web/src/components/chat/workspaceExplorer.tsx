@@ -40,6 +40,8 @@ import { EXPLORER_ROW_PROPS, useExplorerListNavigation } from "./explorerListNav
 import { FileEntryIcon } from "./FileEntryIcon";
 import { fileRowClassName, fileRowIndentStyle } from "./fileRowStyles";
 import { PanelStateMessage } from "./PanelStateMessage";
+import { PortLogArtifactBadge } from "../../portlog/PortLogArtifactBadge";
+import { portLogArtifactSortRank } from "../../portlog/portlogWorkspaceArtifacts";
 
 const EXPLORER_HIDDEN_DIRECTORY_NAMES = new Set([
   ".cache",
@@ -123,6 +125,7 @@ const ExplorerRow = forwardRef<
     selected: boolean;
     expanded: boolean;
     onSelectFile: (path: string) => void;
+    onDoubleClickFile?: ((path: string) => void) | undefined;
     onPrefetchEntry: (entry: ProjectFileSystemEntry) => void;
     onEntryContextMenu: (entry: ProjectFileSystemEntry, position: { x: number; y: number }) => void;
   } & ComponentPropsWithoutRef<"button">
@@ -133,6 +136,7 @@ const ExplorerRow = forwardRef<
     selected,
     expanded,
     onSelectFile,
+    onDoubleClickFile,
     onPrefetchEntry,
     onEntryContextMenu,
     className,
@@ -174,6 +178,9 @@ const ExplorerRow = forwardRef<
       draggable
       onDragStart={handleDragStart}
       onClick={handleClick}
+      onDoubleClick={() => {
+        if (!isDirectory) onDoubleClickFile?.(entry.path);
+      }}
       onPointerEnter={handlePrefetch}
       onFocus={handlePrefetch}
       onContextMenu={handleContextMenu}
@@ -188,6 +195,7 @@ const ExplorerRow = forwardRef<
         />
       )}
       <span className="min-w-0 truncate">{entry.name}</span>
+      {isDirectory ? null : <PortLogArtifactBadge pathValue={entry.path} />}
     </button>
   );
 });
@@ -219,6 +227,7 @@ function WorkspaceDirectory(props: {
   selectedFilePath: string | null;
   expandedDirectories: ReadonlySet<string>;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onToggleDirectory: (path: string) => void;
   onPrefetchEntry: (entry: ProjectFileSystemEntry) => void;
   onEntryContextMenu: (entry: ProjectFileSystemEntry, position: { x: number; y: number }) => void;
@@ -245,59 +254,69 @@ function WorkspaceDirectory(props: {
 
   return (
     <>
-      {(query.data?.entries ?? []).filter(shouldShowExplorerEntry).map((entry) => {
-        if (entry.kind !== "directory") {
-          return (
-            <ExplorerRow
-              key={entry.path}
-              entry={entry}
-              depth={props.depth}
-              selected={entry.path === props.selectedFilePath}
-              expanded={false}
-              onSelectFile={props.onSelectFile}
-              onPrefetchEntry={props.onPrefetchEntry}
-              onEntryContextMenu={props.onEntryContextMenu}
-            />
-          );
-        }
-        const expanded = props.expandedDirectories.has(entry.path);
-        return (
-          <Collapsible
-            key={entry.path}
-            open={expanded}
-            onOpenChange={() => props.onToggleDirectory(entry.path)}
-          >
-            <CollapsibleTrigger
-              render={
-                <ExplorerRow
-                  entry={entry}
-                  depth={props.depth}
-                  selected={false}
-                  expanded={expanded}
-                  onSelectFile={props.onSelectFile}
-                  onPrefetchEntry={props.onPrefetchEntry}
-                  onEntryContextMenu={props.onEntryContextMenu}
-                />
-              }
-            />
-            {/* Keep children mounted only while open (plus the closing transition Base UI
-                manages) so the height animation plays and lazy listings stay cached. */}
-            <CollapsiblePanel>
-              <WorkspaceDirectory
-                cwd={props.cwd}
-                relativePath={entry.path}
-                depth={props.depth + 1}
-                selectedFilePath={props.selectedFilePath}
-                expandedDirectories={props.expandedDirectories}
+      {(query.data?.entries ?? [])
+        .filter(shouldShowExplorerEntry)
+        .toSorted(
+          (left, right) =>
+            portLogArtifactSortRank(left.path) - portLogArtifactSortRank(right.path) ||
+            left.name.localeCompare(right.name),
+        )
+        .map((entry) => {
+          if (entry.kind !== "directory") {
+            return (
+              <ExplorerRow
+                key={entry.path}
+                entry={entry}
+                depth={props.depth}
+                selected={entry.path === props.selectedFilePath}
+                expanded={false}
                 onSelectFile={props.onSelectFile}
-                onToggleDirectory={props.onToggleDirectory}
+                onDoubleClickFile={props.onDoubleClickFile}
                 onPrefetchEntry={props.onPrefetchEntry}
                 onEntryContextMenu={props.onEntryContextMenu}
               />
-            </CollapsiblePanel>
-          </Collapsible>
-        );
-      })}
+            );
+          }
+          const expanded = props.expandedDirectories.has(entry.path);
+          return (
+            <Collapsible
+              key={entry.path}
+              open={expanded}
+              onOpenChange={() => props.onToggleDirectory(entry.path)}
+            >
+              <CollapsibleTrigger
+                render={
+                  <ExplorerRow
+                    entry={entry}
+                    depth={props.depth}
+                    selected={false}
+                    expanded={expanded}
+                    onSelectFile={props.onSelectFile}
+                    onDoubleClickFile={props.onDoubleClickFile}
+                    onPrefetchEntry={props.onPrefetchEntry}
+                    onEntryContextMenu={props.onEntryContextMenu}
+                  />
+                }
+              />
+              {/* Keep children mounted only while open (plus the closing transition Base UI
+                manages) so the height animation plays and lazy listings stay cached. */}
+              <CollapsiblePanel>
+                <WorkspaceDirectory
+                  cwd={props.cwd}
+                  relativePath={entry.path}
+                  depth={props.depth + 1}
+                  selectedFilePath={props.selectedFilePath}
+                  expandedDirectories={props.expandedDirectories}
+                  onSelectFile={props.onSelectFile}
+                  onDoubleClickFile={props.onDoubleClickFile}
+                  onToggleDirectory={props.onToggleDirectory}
+                  onPrefetchEntry={props.onPrefetchEntry}
+                  onEntryContextMenu={props.onEntryContextMenu}
+                />
+              </CollapsiblePanel>
+            </Collapsible>
+          );
+        })}
     </>
   );
 }
@@ -328,6 +347,7 @@ function WorkspaceFilesTreeBody(props: {
   selectedFilePath: string | null;
   expandedDirectories: ReadonlySet<string>;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onToggleDirectory: (path: string) => void;
   onPrefetchEntry: (entry: ProjectFileSystemEntry) => void;
   onEntryContextMenu: (entry: ProjectFileSystemEntry, position: { x: number; y: number }) => void;
@@ -342,6 +362,7 @@ function WorkspaceFilesTreeBody(props: {
           selectedFilePath={props.selectedFilePath}
           expandedDirectories={props.expandedDirectories}
           onSelectFile={props.onSelectFile}
+          onDoubleClickFile={props.onDoubleClickFile}
           onToggleDirectory={props.onToggleDirectory}
           onPrefetchEntry={props.onPrefetchEntry}
           onEntryContextMenu={props.onEntryContextMenu}
@@ -361,6 +382,7 @@ export function WorkspaceFilesSidebar(props: {
   expandedDirectories: ReadonlySet<string>;
   containerClassName?: string;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onToggleDirectory: (path: string) => void;
   onReferenceInChat: ((reference: ChatFileReference) => void) | undefined;
 }) {
@@ -377,6 +399,7 @@ export function WorkspaceFilesSidebar(props: {
         selectedFilePath={props.selectedFilePath}
         expandedDirectories={props.expandedDirectories}
         onSelectFile={props.onSelectFile}
+        onDoubleClickFile={props.onDoubleClickFile}
         onToggleDirectory={props.onToggleDirectory}
         onPrefetchEntry={prefetchEntry}
         onEntryContextMenu={handleEntryContextMenu}
@@ -389,6 +412,7 @@ function WorkspaceSearchResultRow(props: {
   entry: ProjectEntry;
   selected: boolean;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onPrefetchEntry: (entry: Pick<ProjectFileSystemEntry, "path" | "kind">) => void;
   onEntryContextMenu: (path: string, position: { x: number; y: number }) => void;
 }) {
@@ -409,6 +433,7 @@ function WorkspaceSearchResultRow(props: {
         setFileReferenceDragData(event.dataTransfer, entry.path);
       }}
       onClick={() => onSelectFile(entry.path)}
+      onDoubleClick={() => props.onDoubleClickFile?.(entry.path)}
       onPointerEnter={handlePrefetch}
       onFocus={handlePrefetch}
       onContextMenu={(event) => {
@@ -423,6 +448,7 @@ function WorkspaceSearchResultRow(props: {
           <span className="min-w-0 truncate text-[11px] text-muted-foreground/55">{dir}</span>
         ) : null}
       </div>
+      <PortLogArtifactBadge pathValue={entry.path} />
     </button>
   );
 }
@@ -528,6 +554,7 @@ function WorkspaceSearchResultsBody(props: {
   search: WorkspaceFileSearchState;
   selectedFilePath: string | null;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onPrefetchEntry: (entry: Pick<ProjectFileSystemEntry, "path" | "kind">) => void;
   onEntryContextMenu: (path: string, position: { x: number; y: number }) => void;
 }) {
@@ -567,6 +594,7 @@ function WorkspaceSearchResultsBody(props: {
               entry={entry}
               selected={entry.path === props.selectedFilePath}
               onSelectFile={props.onSelectFile}
+              onDoubleClickFile={props.onDoubleClickFile}
               onPrefetchEntry={props.onPrefetchEntry}
               onEntryContextMenu={props.onEntryContextMenu}
             />
@@ -589,6 +617,7 @@ export function WorkspaceSearchSidebar(props: {
   selectedFilePath: string | null;
   containerClassName?: string;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onReferenceInChat: ((reference: ChatFileReference) => void) | undefined;
 }) {
   const prefetchEntry = useExplorerEntryPrefetch(props.workspaceRoot);
@@ -620,6 +649,7 @@ export function WorkspaceSearchSidebar(props: {
           search={search}
           selectedFilePath={props.selectedFilePath}
           onSelectFile={props.onSelectFile}
+          onDoubleClickFile={props.onDoubleClickFile}
           onPrefetchEntry={prefetchEntry}
           onEntryContextMenu={handleEntryContextMenu}
         />
@@ -639,6 +669,7 @@ export function WorkspaceExplorerSidebar(props: {
   onQueryChange: (query: string) => void;
   containerClassName?: string;
   onSelectFile: (path: string) => void;
+  onDoubleClickFile?: ((path: string) => void) | undefined;
   onToggleDirectory: (path: string) => void;
   onReferenceInChat: ((reference: ChatFileReference) => void) | undefined;
 }) {
@@ -665,6 +696,7 @@ export function WorkspaceExplorerSidebar(props: {
           selectedFilePath={props.selectedFilePath}
           expandedDirectories={props.expandedDirectories}
           onSelectFile={props.onSelectFile}
+          onDoubleClickFile={props.onDoubleClickFile}
           onToggleDirectory={props.onToggleDirectory}
           onPrefetchEntry={prefetchEntry}
           onEntryContextMenu={handleTreeEntryContextMenu}
@@ -675,6 +707,7 @@ export function WorkspaceExplorerSidebar(props: {
           search={search}
           selectedFilePath={props.selectedFilePath}
           onSelectFile={props.onSelectFile}
+          onDoubleClickFile={props.onDoubleClickFile}
           onPrefetchEntry={prefetchEntry}
           onEntryContextMenu={handleResultEntryContextMenu}
         />

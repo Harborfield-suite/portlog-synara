@@ -26,6 +26,8 @@ import {
   type OrchestrationThreadStreamItem,
   type ServerConfigStreamEvent,
   type ServerDiagnosticsResult,
+  type ServerByokOAuthProvider,
+  type ServerSettings,
   type ServerLifecycleStreamEvent,
 } from "@synara/contracts";
 import { clamp } from "effect/Number";
@@ -35,6 +37,25 @@ import { RpcMiddleware, RpcSchema, RpcSerialization, RpcServer } from "effect/un
 
 import { AutomationService } from "./automation/Services/AutomationService";
 import { authErrorResponse, makeEffectAuthRequest } from "./auth/effectHttp";
+import { byokProviderModels, byokCatalogProvider, loadByokCatalog } from "./byok/byokCatalog.ts";
+import { listByokCatalogGroups } from "./byok/byokCatalogGroups.ts";
+import { listByokModelsForProvider } from "./byok/listByokModels.ts";
+import { launchByokOAuth } from "./byok/byokOAuth.ts";
+import {
+  isByokOauthConnected,
+  markByokOauthConnected,
+  byokOauthAccountLabel,
+  clearByokOauthConnected,
+} from "./byok/byokOauthMemory.ts";
+import {
+  buildByokProviderConnectionSnapshot,
+  catalogueEntriesForConnectionList,
+  clearByokProbe,
+  envValueForProvider,
+  probeAndRememberByokConnection,
+  rememberByokProbe,
+} from "./byok/byokConnectionRegistry.ts";
+import { ProviderCredentials } from "./providerCredentials";
 import {
   ServerAuth,
   type AuthError,
@@ -47,6 +68,7 @@ import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuer
 import { resolveThreadWorkspaceCwd } from "./checkpointing/Utils";
 import { ServerConfig, type ServerConfigShape } from "./config";
 import { realpathNearestExisting } from "./realpathNearestExisting";
+import { pickNativeFolder } from "./nativeFolderPicker";
 import { workspaceRootsEqual } from "@synara/shared/threadWorkspace";
 import { listStudioThreadOutputs } from "./studioOutputs";
 import {
@@ -143,6 +165,30 @@ import {
   GitHubProjectProvisioningError,
   makeGitHubProjectProvisioner,
 } from "./project/githubProjectProvisioning";
+
+function providerOAuthExecutable(
+  settings: ServerSettings,
+  provider: ServerByokOAuthProvider,
+): string | undefined {
+  switch (provider) {
+    case "openai-codex":
+      return settings.providers.codex.binaryPath;
+    case "anthropic":
+      return settings.providers.claudeAgent.binaryPath;
+    case "cursor":
+      return settings.providers.cursor.binaryPath;
+    case "google-antigravity":
+      return settings.providers.antigravity.binaryPath;
+    case "xai-oauth":
+      return settings.providers.grok.binaryPath;
+    case "droid":
+      return settings.providers.droid.binaryPath;
+    case "kilo":
+      return settings.providers.kilo.binaryPath;
+    case "opencode":
+      return settings.providers.opencode.binaryPath;
+  }
+}
 
 export function canManageExternalMcp(role: "owner" | "client"): boolean {
   return role === "owner";
@@ -344,6 +390,7 @@ const makeWsRpcHandlersLayer = () =>
       const providerAdapterRegistry = yield* ProviderAdapterRegistry;
       const providerDiscoveryService = yield* ProviderDiscoveryService;
       const providerHealth = yield* ProviderHealth;
+      const providerCredentials = yield* ProviderCredentials;
       const providerService = yield* ProviderService;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const runtimeStartup = yield* ServerRuntimeStartup;
@@ -1297,6 +1344,11 @@ const makeWsRpcHandlersLayer = () =>
             }),
             "Failed to list studio thread outputs",
           ),
+        [WS_METHODS.dialogsPickFolder]: () =>
+          rpcEffect(
+            Effect.promise(() => pickNativeFolder()),
+            "Failed to open the native folder picker",
+          ),
         [WS_METHODS.filesystemBrowse]: (input) =>
           rpcEffect(workspaceEntries.browse(input), "Failed to browse filesystem"),
         [WS_METHODS.shellOpenInEditor]: (input) =>
@@ -1554,6 +1606,223 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(serverSettings.getSettingsView, "Failed to load server settings"),
         [WS_METHODS.serverUpdateSettings]: (input) =>
           rpcEffect(serverSettings.updateSettingsView(input), "Failed to update server settings"),
+        [WS_METHODS.serverListByokProviders]: () =>
+          rpcEffect(
+            Effect.gen(function* () {
+              const metadata = loadByokCatalog().metadata;
+              const statuses = yield* providerHealth.getStatuses.pipe(Effect.orDie);
+              const oauthByCatalogueId = {
+                anthropic: statuses.find((entry) => entry.provider === "claudeAgent"),
+                "openai-codex": statuses.find((entry) => entry.provider === "codex"),
+                cursor: statuses.find((entry) => entry.provider === "cursor"),
+              } as const;
+
+              const providers = yield* Effect.forEach(
+                catalogueEntriesForConnectionList(),
+                (entry) =>
+                  Effect.gen(function* () {
+                    const catalogued = byokCatalogProvider(entry.id);
+                    const storedKey = yield* providerCredentials.getByokApiKey(entry.id);
+                    const lastProbe = yield* providerCredentials.getByokCredentialHealth(entry.id);
+                    const envValue = envValueForProvider(entry.id);
+                    const oauthStatus =
+                      entry.id === "anthropic" ||
+                      entry.id === "openai-codex" ||
+                      entry.id === "cursor"
+                        ? oauthByCatalogueId[entry.id]
+                        : undefined;
+                    const oauthConnected = Boolean(
+                      (oauthStatus?.available && oauthStatus.authStatus === "authenticated") ||
+                        isByokOauthConnected(entry.id),
+                    );
+                    const snapshot = buildByokProviderConnectionSnapshot({
+                      providerId: entry.id,
+                      name: entry.name,
+                      doc: entry.doc,
+                      modelCount: entry.modelCount,
+                      isLocal: entry.isLocal,
+                      wire: entry.wire,
+                      baseUrl: entry.baseUrl,
+                      envVar: catalogued?.env_var ?? (entry.id === "openai-codex" ? "OPENAI_API_KEY" : ""),
+                      storedKey,
+                      envValue,
+                      oauthConnected,
+                      oauthAccountLabel: byokOauthAccountLabel(entry.id),
+                      ...(lastProbe === null ? { lastProbe: null } : { lastProbe: { kind: lastProbe } }),
+                    });
+                    return snapshot;
+                  }),
+              );
+              return { providers, metadata };
+            }),
+            "Failed to list BYOK providers",
+          ),
+        [WS_METHODS.serverListByokCatalogGroups]: (input) =>
+          rpcEffect(
+            Effect.sync(() => ({
+              groups: listByokCatalogGroups(
+                input.query === undefined ? {} : { query: input.query },
+              ),
+              metadata: loadByokCatalog().metadata,
+            })),
+            "Failed to list BYOK catalog groups",
+          ),
+        [WS_METHODS.serverStartByokOAuth]: (input) =>
+          rpcEffect(
+            Effect.gen(function* () {
+              const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+              const executable = providerOAuthExecutable(settings, input.provider);
+              const command = yield* Effect.promise(() =>
+                launchByokOAuth(input.provider, "login", executable),
+              );
+              yield* providerHealth.refresh;
+              return {
+                provider: input.provider,
+                executable: command.executable,
+                args: [...command.args],
+              };
+            }),
+            "Failed to complete BYOK OAuth login",
+          ),
+        [WS_METHODS.serverLogoutByokOAuth]: (input) =>
+          rpcEffect(
+            Effect.gen(function* () {
+              const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+              const executable = providerOAuthExecutable(settings, input.provider);
+              const command = yield* Effect.promise(() =>
+                launchByokOAuth(input.provider, "logout", executable),
+              );
+              clearByokOauthConnected(input.provider);
+              clearByokProbe(input.provider);
+              yield* providerHealth.refresh;
+              return {
+                provider: input.provider,
+                executable: command.executable,
+                args: [...command.args],
+              };
+            }),
+            "Failed to complete BYOK OAuth logout",
+          ),
+        [WS_METHODS.serverListByokModels]: (input) =>
+          rpcEffect(
+            Effect.gen(function* () {
+              const models = yield* Effect.promise(() =>
+                listByokModelsForProvider(input.provider),
+              );
+              return {
+                provider: input.provider,
+                models: [...models],
+              };
+            }),
+            "Failed to list BYOK models",
+          ),
+        [WS_METHODS.serverSetByokApiKey]: (input) =>
+          rpcEffect(
+            Effect.gen(function* () {
+              yield* providerCredentials.replaceByokApiKey(input.provider, input.apiKey);
+              if (!input.apiKey?.trim()) {
+                clearByokProbe(input.provider);
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, null);
+                clearByokOauthConnected(input.provider);
+                return {
+                  provider: input.provider,
+                  apiKeyConfigured: false,
+                  status: "not-configured" as const,
+                  errorReason: null,
+                  credentialSource: null,
+                  maskedKeySuffix: null,
+                };
+              }
+              const probe = yield* Effect.promise(() =>
+                probeAndRememberByokConnection({
+                  providerId: input.provider,
+                  apiKey: input.apiKey,
+                }),
+              );
+              if (probe.kind === "ok" || probe.kind === "invalid-credential") {
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, probe.kind);
+              }
+              // xAI OAuth tokens may fail the public models probe; still treat as connected.
+              if (
+                (input.provider === "xai" || input.provider === "xai-oauth") &&
+                probe.kind !== "ok"
+              ) {
+                rememberByokProbe(input.provider, { kind: "ok" });
+                markByokOauthConnected(input.provider, "xAI");
+              }
+              const envValue = envValueForProvider(input.provider);
+              const snapshot = buildByokProviderConnectionSnapshot({
+                providerId: input.provider,
+                name: input.provider,
+                doc: "",
+                modelCount: byokProviderModels(input.provider).length,
+                isLocal: byokCatalogProvider(input.provider)?.is_local === true,
+                wire: byokCatalogProvider(input.provider)?.wire ?? "openai",
+                baseUrl: byokCatalogProvider(input.provider)?.base_url ?? "",
+                envVar: byokCatalogProvider(input.provider)?.env_var ?? "",
+                storedKey: input.apiKey,
+                envValue,
+                oauthConnected: isByokOauthConnected(input.provider),
+              });
+              if (snapshot.status === "connected") {
+                yield* serverSettings.updateSettings({
+                  providers: {
+                    openaiCompatible: {
+                      catalogProviderId: input.provider,
+                    },
+                  },
+                });
+              }
+              return {
+                provider: input.provider,
+                apiKeyConfigured: snapshot.apiKeyConfigured,
+                status: snapshot.status,
+                errorReason: snapshot.errorReason,
+                credentialSource: snapshot.credentialSource,
+                maskedKeySuffix: snapshot.maskedKeySuffix,
+              };
+            }),
+            "Failed to update BYOK API key",
+          ),
+        [WS_METHODS.serverTestByokConnection]: (input) =>
+          rpcEffect(
+            Effect.gen(function* () {
+              const storedKey = yield* providerCredentials.getByokApiKey(input.provider);
+              const envValue = envValueForProvider(input.provider);
+              const apiKey = storedKey?.trim() || envValue;
+              const probe = yield* Effect.promise(() =>
+                probeAndRememberByokConnection({
+                  providerId: input.provider,
+                  apiKey,
+                }),
+              );
+              if (probe.kind === "ok" || probe.kind === "invalid-credential") {
+                yield* providerCredentials.replaceByokCredentialHealth(input.provider, probe.kind);
+              }
+              const catalogued = byokCatalogProvider(input.provider);
+              const snapshot = buildByokProviderConnectionSnapshot({
+                providerId: input.provider,
+                name: catalogued?.name ?? input.provider,
+                doc: catalogued?.doc ?? "",
+                modelCount: catalogued?.models.length ?? 0,
+                isLocal: catalogued?.is_local === true,
+                wire: catalogued?.wire ?? "openai",
+                baseUrl: catalogued?.base_url ?? "",
+                envVar: catalogued?.env_var ?? "",
+                storedKey,
+                envValue,
+              });
+              return {
+                provider: input.provider,
+                status: snapshot.status,
+                errorReason: snapshot.errorReason,
+                credentialSource: snapshot.credentialSource,
+                maskedKeySuffix: snapshot.maskedKeySuffix,
+                apiKeyConfigured: snapshot.apiKeyConfigured,
+              };
+            }),
+            "Failed to test BYOK connection",
+          ),
         [WS_METHODS.serverRefreshProviders]: () =>
           rpcEffect(
             providerHealth.refresh.pipe(Effect.map((providers) => ({ providers }))),
