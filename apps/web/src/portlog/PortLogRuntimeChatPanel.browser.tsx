@@ -116,9 +116,9 @@ describe("PortLogRuntimeChatPanel", () => {
     expect(
       page.getByTestId("portlog-runtime-chat").element().querySelector('[data-chat-transcript-pane="true"]'),
     ).not.toBeNull();
-    expect(
-      page.getByTestId("portlog-runtime-chat").element().querySelector('[data-chat-scroll-container="true"]'),
-    ).not.toBeNull();
+    const chat = page.getByTestId("portlog-runtime-chat").element();
+    expect(chat.querySelector('[data-chat-scroll-container="true"]')).not.toBeNull();
+    expect(chat.querySelectorAll('[class*="max-w-none"]').length).toBeGreaterThan(0);
   });
 
   it("keeps the Synara composer disabled and exposes runtime cancellation during an active turn", async () => {

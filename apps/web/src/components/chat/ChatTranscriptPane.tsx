@@ -38,6 +38,7 @@ interface ChatTranscriptPaneProps {
   activeTurnStartedAt: string | null;
   agentActivityDetail?: AgentActivityDetail | null;
   contentInsetRightPx?: ComponentProps<typeof MessagesTimeline>["contentInsetRightPx"];
+  contentMaxWidthClassName?: ComponentProps<typeof MessagesTimeline>["contentMaxWidthClassName"];
   chatFontSizePx: number;
   emptyStateContent?: ReactNode;
   emptyStateProjectName: string | undefined;
@@ -102,6 +103,7 @@ export function ChatTranscriptPane({
   activeTurnStartedAt,
   agentActivityDetail,
   contentInsetRightPx,
+  contentMaxWidthClassName,
   chatFontSizePx,
   emptyStateContent,
   emptyStateProjectName,
@@ -216,6 +218,7 @@ export function ChatTranscriptPane({
             {...(crossTaskOrigin ? { crossTaskOrigin } : {})}
             isTemporaryThread={isTemporaryThread ?? false}
             timelineEntries={timelineEntries}
+            contentMaxWidthClassName={contentMaxWidthClassName}
             turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
             onOpenTurnDiff={onOpenTurnDiff}
             onOpenThread={onOpenThread}

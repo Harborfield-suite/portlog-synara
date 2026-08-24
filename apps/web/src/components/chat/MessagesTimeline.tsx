@@ -397,6 +397,8 @@ interface MessagesTimelineProps {
   /** Marks the transcript as a temporary chat so user bubbles render the dashed primary outline. */
   isTemporaryThread?: boolean;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
+  /** Optional width override for product surfaces that need the transcript to fill its pane. */
+  contentMaxWidthClassName?: string;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
   nowIso?: string;
   expandedWorkGroups?: Record<string, boolean>;
@@ -467,6 +469,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   crossTaskOrigin: crossTaskOriginProp,
   isTemporaryThread: isTemporaryThreadProp,
   timelineEntries,
+  contentMaxWidthClassName,
   turnDiffSummaryByAssistantMessageId,
   nowIso,
   expandedWorkGroups,
@@ -1067,6 +1070,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     <div
       className={cn(
         CHAT_COLUMN_FRAME_CLASS_NAME,
+        contentMaxWidthClassName,
         "px-1 transition-colors duration-500",
         row.kind === "working" ||
           (row.kind === "message" &&
