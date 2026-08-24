@@ -364,7 +364,7 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         activeTurnInProgress={Boolean(activeTurnId)}
         activeTurnStartedAt={activeTurnStartedAt}
         chatFontSizePx={DEFAULT_CHAT_FONT_SIZE_PX}
-        contentMaxWidthClassName="max-w-none"
+        contentMaxWidthClassName="!max-w-none"
         emptyStateProjectName={undefined}
         hasMessages={timelineEntries.length > 0}
         isRevertingCheckpoint={false}
@@ -423,7 +423,7 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         data-chat-composer-form="true"
         data-testid="portlog-composer-form"
       >
-        <ComposerColumnFrame className="max-w-none">
+        <ComposerColumnFrame className="!max-w-none">
           <div className={COMPOSER_INPUT_SHELL_CLASS_NAME}>
             <div className={COMPOSER_INPUT_SURFACE_CLASS_NAME}>
               <div className={COMPOSER_EDITOR_PADDING_CLASS_NAME}>

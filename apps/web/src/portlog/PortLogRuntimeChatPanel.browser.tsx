@@ -159,6 +159,10 @@ describe("PortLogRuntimeChatPanel", () => {
     const chat = page.getByTestId("portlog-runtime-chat").element();
     expect(chat.querySelector('[data-chat-scroll-container="true"]')).not.toBeNull();
     expect(chat.querySelectorAll('[class*="max-w-none"]').length).toBeGreaterThan(0);
+    const timeline = chat.querySelector<HTMLElement>('[data-messages-timeline-root]');
+    const wideRow = timeline?.querySelector<HTMLElement>('[class*="max-w-none"]');
+    expect(wideRow).not.toBeNull();
+    expect(getComputedStyle(wideRow!).maxWidth).toBe("none");
   });
 
   it("initially follows the tail of recovered history", async () => {
