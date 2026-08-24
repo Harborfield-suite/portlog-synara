@@ -651,7 +651,7 @@ Start by reading:
 1. AGENTS.md
 2. audit/BRANCH_REVIEW_HANDOFF.md
 3. audit/README.md only for the exact workstream you are reviewing
-4. advisor-plans/README.md only to confirm status and scope boundaries
+4. .docs/archive/advisor-plans/README.md only to confirm status and scope boundaries
 
 Baseline: 5056e395e (v0.5.2)
 Committed HEAD: 9780ff8bb
@@ -720,7 +720,7 @@ git diff --check
 Useful entry points:
 
 - `audit/README.md` — evidence ledger and detailed workstream acceptance criteria;
-- `advisor-plans/README.md` — execution controller and pruning history;
+- `.docs/archive/advisor-plans/README.md` — execution controller and pruning history;
 - `apps/server/src/provider/acp/AcpSessionRuntime.ts` — official ACP SDK seam;
 - `apps/server/scripts/acp-wire-benchmark.ts` — shared benchmark runner;
 - `benchmarks/acp-wire/` — stored comparisons;

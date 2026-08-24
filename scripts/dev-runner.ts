@@ -27,7 +27,7 @@ export const DEFAULT_SYNARA_HOME = Effect.map(Effect.service(Path.Path), (path) 
   path.join(homedir(), ".synara"),
 );
 
-const MODE_ARGS = {
+export const MODE_ARGS = {
   dev: [
     "run",
     "dev",
@@ -39,7 +39,14 @@ const MODE_ARGS = {
   ],
   "dev:server": ["run", "dev", "--filter=@synara/cli"],
   "dev:web": ["run", "dev", "--filter=@synara/web"],
-  "dev:desktop": ["run", "dev", "--filter=@synara/desktop", "--filter=@synara/web", "--parallel"],
+  "dev:desktop": [
+    "run",
+    "dev",
+    "--filter=@synara/desktop",
+    "--filter=@synara/web",
+    "--filter=@synara/portlog-runtime",
+    "--parallel",
+  ],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;

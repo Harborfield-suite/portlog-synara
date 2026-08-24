@@ -26,6 +26,7 @@ import {
   WorkflowIcon,
 } from "~/lib/icons";
 import { PortLogDexpiWorkbench } from "../portlog/PortLogDexpiWorkbench";
+import { PortLogRuntimeStatus } from "./PortLogRuntimeStatus";
 import {
   useDesktopTopBarTrafficLightGutterClassName,
   useDesktopTopBarWindowControlsGutterClassName,
@@ -557,6 +558,7 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
               {props.workspaceRoot ?? "No workspace"}
             </span>
           </div>
+          <PortLogRuntimeStatus />
           {props.onSelectProject && (props.projectOptions?.length ?? 0) > 0 ? (
             <ProjectMenuPicker
               projectOptions={props.projectOptions ?? []}

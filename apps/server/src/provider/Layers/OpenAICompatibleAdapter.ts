@@ -50,7 +50,6 @@ import {
   streamAiSdkChat,
   usesAiSdkChatPath,
 } from "../aiSdkChatClient.ts";
-import { makeWorkspaceTools } from "../workspaceTools.ts";
 
 const PROVIDER = "openaiCompatible" as const;
 
@@ -301,67 +300,6 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
             } satisfies ProviderRuntimeEvent);
           };
 
-          const toolItemIds = new Map<string, RuntimeItemId>();
-          const offerToolCall = (call: {
-            readonly toolCallId: string;
-            readonly toolName: string;
-            readonly input: unknown;
-          }) => {
-            const toolItemId = RuntimeItemId.makeUnsafe(
-              `byok-tool-${call.toolCallId || crypto.randomUUID()}`,
-            );
-            toolItemIds.set(call.toolCallId, toolItemId);
-            offer({
-              ...makeEventBase(context, turnId),
-              itemId: toolItemId,
-              type: "item.started",
-              payload: {
-                itemType: "dynamic_tool_call",
-                status: "inProgress",
-                title: call.toolName,
-              },
-            } satisfies ProviderRuntimeEvent);
-          };
-          const offerToolResult = (result: {
-            readonly toolCallId: string;
-            readonly toolName: string;
-            readonly output: unknown;
-          }) => {
-            const toolItemId = toolItemIds.get(result.toolCallId);
-            if (!toolItemId) return;
-            offer({
-              ...makeEventBase(context, turnId),
-              itemId: toolItemId,
-              type: "item.completed",
-              payload: {
-                itemType: "dynamic_tool_call",
-                status: "completed",
-                title: result.toolName,
-                detail: typeof result.output === "string" ? result.output.slice(0, 2_000) : undefined,
-              },
-            } satisfies ProviderRuntimeEvent);
-          };
-          const offerToolError = (failure: {
-            readonly toolCallId: string;
-            readonly toolName: string;
-            readonly error: unknown;
-          }) => {
-            const toolItemId = toolItemIds.get(failure.toolCallId);
-            if (!toolItemId) return;
-            const message = failure.error instanceof Error ? failure.error.message : String(failure.error);
-            offer({
-              ...makeEventBase(context, turnId),
-              itemId: toolItemId,
-              type: "item.completed",
-              payload: {
-                itemType: "dynamic_tool_call",
-                status: "failed",
-                title: failure.toolName,
-                detail: message.slice(0, 2_000),
-              },
-            } satisfies ProviderRuntimeEvent);
-          };
-
           const fullText = usesAiSdkChatPath(config.catalogProviderId)
             ? await streamAiSdkChat(
                 {
@@ -373,15 +311,9 @@ const makeOpenAICompatibleAdapter = Effect.gen(function* () {
                   model,
                   messages: messagesForModel,
                   baseUrl: config.baseUrl,
-                  tools: makeWorkspaceTools(context.session.cwd ?? serverConfig.cwd),
                   signal: abortController.signal,
                 },
-                {
-                  onTextDelta,
-                  onToolCall: offerToolCall,
-                  onToolResult: offerToolResult,
-                  onToolError: offerToolError,
-                },
+                { onTextDelta },
               )
             : await streamOpenAICompatibleChat(
                 {

@@ -186,6 +186,44 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   dexpi: {
     importSource: (input) => ipcRenderer.invoke(IPC.dexpiImportSource, input),
   },
+  portlogRuntime: {
+    getStatus: () => ipcRenderer.invoke(IPC.portlogRuntime.getStatus),
+    health: () => ipcRenderer.invoke(IPC.portlogRuntime.health),
+    listModels: () => ipcRenderer.invoke(IPC.portlogRuntime.listModels),
+    openProject: (input) => ipcRenderer.invoke(IPC.portlogRuntime.openProject, input),
+    describeProject: (input) => ipcRenderer.invoke(IPC.portlogRuntime.describeProject, input),
+    listWorkspace: (input) => ipcRenderer.invoke(IPC.portlogRuntime.listWorkspace, input),
+    listArtifacts: (input) => ipcRenderer.invoke(IPC.portlogRuntime.listArtifacts, input),
+    describeArtifact: (input) => ipcRenderer.invoke(IPC.portlogRuntime.describeArtifact, input),
+    readContent: (input) => ipcRenderer.invoke(IPC.portlogRuntime.readContent, input),
+    writeContent: (input) => ipcRenderer.invoke(IPC.portlogRuntime.writeContent, input),
+    recordEvidence: (input) => ipcRenderer.invoke(IPC.portlogRuntime.recordEvidence, input),
+    getEvidence: (input) => ipcRenderer.invoke(IPC.portlogRuntime.getEvidence, input),
+    listEvidence: (input) => ipcRenderer.invoke(IPC.portlogRuntime.listEvidence, input),
+    recordFinding: (input) => ipcRenderer.invoke(IPC.portlogRuntime.recordFinding, input),
+    listFindings: (input) => ipcRenderer.invoke(IPC.portlogRuntime.listFindings, input),
+    createSession: (input) => ipcRenderer.invoke(IPC.portlogRuntime.createSession, input),
+    sendTurn: (input) => ipcRenderer.invoke(IPC.portlogRuntime.sendTurn, input),
+    cancelTurn: (input) => ipcRenderer.invoke(IPC.portlogRuntime.cancelTurn, input),
+    attachSession: (input) => ipcRenderer.invoke(IPC.portlogRuntime.attachSession, input),
+    sessionHistory: (input) => ipcRenderer.invoke(IPC.portlogRuntime.sessionHistory, input),
+    onStatus: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
+        if (typeof state !== "object" || state === null) return;
+        listener(state as Parameters<typeof listener>[0]);
+      };
+      ipcRenderer.on(IPC.portlogRuntime.status, wrappedListener);
+      return () => ipcRenderer.removeListener(IPC.portlogRuntime.status, wrappedListener);
+    },
+    onEvent: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, event: unknown) => {
+        if (typeof event !== "object" || event === null) return;
+        listener(event as Parameters<typeof listener>[0]);
+      };
+      ipcRenderer.on(IPC.portlogRuntime.event, wrappedListener);
+      return () => ipcRenderer.removeListener(IPC.portlogRuntime.event, wrappedListener);
+    },
+  },
   server: {
     transcribeVoice: (input) => ipcRenderer.invoke(IPC.transcribeVoice, input),
   },

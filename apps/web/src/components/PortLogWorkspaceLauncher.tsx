@@ -9,6 +9,11 @@ import {
 } from "../lib/composerDropPaths";
 import { createOrRecoverProjectFromPath } from "../lib/projectCreation";
 import { readNativeApi } from "../nativeApi";
+import {
+  getPortLogWorkspaceSource,
+  type PortLogWorkspace,
+  type PortLogWorkspaceSource,
+} from "../portlog/portlogWorkspaceSource";
 import { CreateProjectDialog, type CreateProjectSubmitValue } from "./CreateProjectDialog";
 import { Button } from "./ui/button";
 import { CentralIcon } from "~/lib/central-icons";
@@ -35,18 +40,51 @@ function parentDirectory(path: string): string {
   return separator > 0 ? normalized.slice(0, separator) : normalized;
 }
 
+function workspaceName(path: string): string {
+  const normalized = path.replace(/\\/gu, "/").replace(/\/$/u, "");
+  const separator = normalized.lastIndexOf("/");
+  return separator >= 0 ? normalized.slice(separator + 1) || "Workspace" : normalized;
+}
+
 export function PortLogWorkspaceLauncher(props: {
   projects: readonly Project[];
   spaces: readonly Space[];
   activeSpaceId: SpaceId | null;
   homeDir: string | null;
   onOpenProject: (projectId: ProjectId) => void | Promise<void>;
+  onOpenPortLogWorkspace?: (workspace: PortLogWorkspace, name: string) => void | Promise<void>;
+  workspaceSource?: PortLogWorkspaceSource | null;
 }) {
   const syncServerShellSnapshot = useStore((store) => store.syncServerShellSnapshot);
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const [droppedWorkspaceRoot, setDroppedWorkspaceRoot] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const recentProjects = useMemo(() => resolveRecentProjects(props.projects), [props.projects]);
+
+  const openPortLogWorkspace = async (
+    root: string,
+    name: string,
+    options?: { readonly createIfMissing?: boolean },
+  ): Promise<boolean> => {
+    const source = props.workspaceSource ?? getPortLogWorkspaceSource();
+    if (!source || !props.onOpenPortLogWorkspace) {
+      return false;
+    }
+    const workspace = options ? await source.open(root, options) : await source.open(root);
+    await props.onOpenPortLogWorkspace(workspace, name);
+    return true;
+  };
+
+  const openRecentProject = async (project: Project) => {
+    try {
+      if (await openPortLogWorkspace(project.cwd, project.name)) {
+        return;
+      }
+      await props.onOpenProject(project.id);
+    } catch (cause: unknown) {
+      setDropError(cause instanceof Error ? cause.message : "Could not open that workspace.");
+    }
+  };
 
   const openProjectDialog = () => {
     setDropError(null);
@@ -81,6 +119,13 @@ export function PortLogWorkspaceLauncher(props: {
   ) => {
     if (value.source !== "local") {
       throw new Error("GitHub projects can be added from the project sidebar.");
+    }
+    if (
+      await openPortLogWorkspace(value.workspaceRoot, workspaceName(value.workspaceRoot), {
+        createIfMissing: value.createIfMissing,
+      })
+    ) {
+      return;
     }
     const api = readNativeApi();
     if (!api) {
@@ -133,7 +178,7 @@ export function PortLogWorkspaceLauncher(props: {
                   key={project.id}
                   type="button"
                   className={`flex items-center justify-between rounded-lg px-4 py-3 text-left transition-colors duration-200 ease-out hover:bg-secondary ${index === 0 ? "border border-border bg-secondary/45" : ""}`}
-                  onClick={() => void props.onOpenProject(project.id)}
+                  onClick={() => void openRecentProject(project)}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-foreground">{project.name}</span>

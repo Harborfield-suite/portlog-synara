@@ -1,11 +1,10 @@
-import { isWorkspaceRelativePathSafe, joinWorkspaceRelativePath } from "@synara/shared/path";
+import { isWorkspaceRelativePathSafe } from "@synara/shared/path";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DesktopDexpiImportInput, DesktopDexpiImportResult } from "@synara/contracts";
 
 import { PortLogEntityInspector, parsePortLogDexpiEntities } from "./PortLogEntityInspector";
 import { PortLogSvgPreview } from "./PortLogSvgPreview";
 import { isPortLogPrimaryDrawingPath } from "./portlogWorkspaceArtifacts";
-import { usePortLogLocalFile } from "./usePortLogLocalFile";
 
 export function PortLogDexpiWorkbench(props: {
   sourcePath?: string | null;
@@ -17,15 +16,14 @@ export function PortLogDexpiWorkbench(props: {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const browserSvgPath = useMemo(() => {
     if (
-      !props.sourceCwd ||
       !props.sourcePath ||
       !isWorkspaceRelativePathSafe(props.sourcePath) ||
       !/\.xml$/iu.test(props.sourcePath)
     ) {
       return null;
     }
-    return joinWorkspaceRelativePath(props.sourceCwd, props.sourcePath.replace(/\.xml$/iu, ".svg"));
-  }, [props.sourceCwd, props.sourcePath]);
+    return props.sourcePath.replace(/\.xml$/iu, ".svg");
+  }, [props.sourcePath]);
   const hasDesktopRenderer = typeof window !== "undefined" && Boolean(window.desktopBridge?.dexpi);
 
   const importSource = useCallback(async (input?: DesktopDexpiImportInput) => {
@@ -82,7 +80,11 @@ export function PortLogDexpiWorkbench(props: {
           onEntitySelect={setSelectedEntityId}
         />
       ) : !hasDesktopRenderer && browserSvgPath ? (
-        <PortLogSvgPreview svgPath={browserSvgPath} onEntitySelect={setSelectedEntityId} />
+        <PortLogSvgPreview
+          svgPath={browserSvgPath}
+          workspaceRoot={props.sourceCwd}
+          onEntitySelect={setSelectedEntityId}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           Import a DEXPI XML drawing to open its source-faithful SVG representation.
@@ -97,16 +99,16 @@ function ImportedDexpiArtifact(props: {
   selectedEntityId: string | null;
   onEntitySelect: (entityId: string | null) => void;
 }) {
-  const sceneFile = usePortLogLocalFile(props.artifact.scenePath);
   const entities = useMemo(
-    () => parsePortLogDexpiEntities(sceneFile.contents),
-    [sceneFile.contents],
+    () => parsePortLogDexpiEntities(props.artifact.sceneContents),
+    [props.artifact.sceneContents],
   );
 
   return (
     <div className="flex min-h-0 flex-1">
       <PortLogSvgPreview
         svgPath={props.artifact.svgPath}
+        svgContents={props.artifact.svgContents}
         selectedEntityId={props.selectedEntityId}
         onEntitySelect={props.onEntitySelect}
       />

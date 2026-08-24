@@ -11,6 +11,8 @@ import type {
 import { isLocalAbsolutePath } from "@synara/shared/path";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "~/nativeApi";
+import { getPortLogWorkspaceSource } from "~/portlog/portlogWorkspaceSource";
+import { getPortLogWorkspaceByRoot } from "~/portlog/portlogWorkspaceStore";
 
 export const projectQueryKeys = {
   all: ["projects"] as const,
@@ -119,10 +121,26 @@ export function projectListDirectoriesQueryOptions(input: {
   return queryOptions<ProjectListDirectoriesResult>({
     queryKey: projectQueryKeys.listDirectories(input.cwd, relativePath, includeFiles),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!input.cwd) {
         throw new Error("Workspace directory listing is unavailable.");
       }
+      const registeredWorkspace = getPortLogWorkspaceByRoot(input.cwd);
+      const portlog = registeredWorkspace ? getPortLogWorkspaceSource() : null;
+      if (portlog && registeredWorkspace) {
+        const entries = await portlog.list(registeredWorkspace, relativePath ?? undefined, includeFiles);
+        return {
+          entries: entries.map((entry) => ({
+            path: entry.relativePath,
+            name: entry.name,
+            kind: entry.kind,
+            ...(entry.relativePath.includes("/")
+              ? { parentPath: entry.relativePath.slice(0, entry.relativePath.lastIndexOf("/")) }
+              : {}),
+            ...(entry.kind === "directory" ? { hasChildren: true } : {}),
+          })),
+        };
+      }
+      const api = ensureNativeApi();
       return api.projects.listDirectories({
         cwd: input.cwd,
         includeFiles,
@@ -150,10 +168,23 @@ export function projectReadFileQueryOptions(input: {
   return queryOptions<ProjectReadFileResult>({
     queryKey: projectQueryKeys.readFile(input.cwd, input.relativePath),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!effectiveCwd || !input.relativePath) {
         throw new Error("Workspace file read is unavailable.");
       }
+      const registeredWorkspace = getPortLogWorkspaceByRoot(effectiveCwd);
+      const portlog = registeredWorkspace ? getPortLogWorkspaceSource() : null;
+      if (portlog && registeredWorkspace && !isLocalAbsolutePath(input.relativePath)) {
+        const content = await portlog.readFile(registeredWorkspace, input.relativePath);
+        return {
+          relativePath: input.relativePath,
+          contents: content.contents,
+          truncated: content.truncated,
+          version: content.version ?? null,
+          encoding: null,
+          lineEnding: null,
+        };
+      }
+      const api = ensureNativeApi();
       return api.projects.readFile({
         cwd: effectiveCwd,
         relativePath: input.relativePath,
@@ -177,10 +208,13 @@ export function projectResolveOutOfRootFileReferenceQueryOptions(input: {
   return queryOptions<ProjectResolveOutOfRootFileReferenceResult>({
     queryKey: projectQueryKeys.resolveOutOfRootFileReference(input.cwd, input.relativePath),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!input.cwd || !input.relativePath) {
         throw new Error("Out-of-root file reference resolution is unavailable.");
       }
+      if (getPortLogWorkspaceByRoot(input.cwd)) {
+        return { fullPath: null };
+      }
+      const api = ensureNativeApi();
       return api.projects.resolveOutOfRootFileReference({
         cwd: input.cwd,
         relativePath: input.relativePath,
@@ -221,10 +255,15 @@ export function projectDiscoverScriptsQueryOptions(input: {
   return queryOptions({
     queryKey: projectQueryKeys.discoverScripts(input.cwd, depth),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!input.cwd) {
         throw new Error("Project script discovery is unavailable.");
       }
+      const registeredWorkspace = getPortLogWorkspaceByRoot(input.cwd);
+      const portlog = registeredWorkspace ? getPortLogWorkspaceSource() : null;
+      if (portlog && registeredWorkspace) {
+        return portlog.discoverScripts(registeredWorkspace, depth);
+      }
+      const api = ensureNativeApi();
       return api.projects.discoverScripts({
         cwd: input.cwd,
         depth,
@@ -248,10 +287,15 @@ export function projectSearchEntriesQueryOptions(input: {
   return queryOptions({
     queryKey: projectQueryKeys.searchEntries(input.cwd, input.query, limit, input.kind ?? null),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!input.cwd) {
         throw new Error("Workspace entry search is unavailable.");
       }
+      const registeredWorkspace = getPortLogWorkspaceByRoot(input.cwd);
+      const portlog = registeredWorkspace ? getPortLogWorkspaceSource() : null;
+      if (portlog && registeredWorkspace) {
+        return portlog.searchEntries(registeredWorkspace, input.query, limit, input.kind);
+      }
+      const api = ensureNativeApi();
       return api.projects.searchEntries({
         cwd: input.cwd,
         query: input.query,
@@ -278,10 +322,32 @@ export function projectSearchLocalEntriesQueryOptions(input: {
   return queryOptions({
     queryKey: projectQueryKeys.searchLocalEntries(input.rootPath, trimmedQuery, limit),
     queryFn: async () => {
-      const api = ensureNativeApi();
       if (!input.rootPath) {
         throw new Error("Local entry search is unavailable.");
       }
+      const registeredWorkspace = getPortLogWorkspaceByRoot(input.rootPath);
+      const portlog = registeredWorkspace ? getPortLogWorkspaceSource() : null;
+      if (portlog && registeredWorkspace) {
+        const result = await portlog.searchEntries(
+          registeredWorkspace,
+          trimmedQuery,
+          limit,
+          input.includeFiles === false ? "directory" : undefined,
+        );
+        return {
+          entries: result.entries.map((entry) => {
+            const separator = entry.path.lastIndexOf("/");
+            return {
+              path: entry.path,
+              name: separator >= 0 ? entry.path.slice(separator + 1) : entry.path,
+              kind: entry.kind,
+              ...(separator >= 0 ? { parentPath: entry.path.slice(0, separator) } : {}),
+            };
+          }),
+          truncated: result.truncated,
+        };
+      }
+      const api = ensureNativeApi();
       return api.projects.searchLocalEntries({
         rootPath: input.rootPath,
         query: trimmedQuery,

@@ -41,6 +41,18 @@ import type {
   DesktopTheme,
   DesktopUpdateActionResult,
   DesktopUpdateState,
+  PortLogRuntimeContentReadInput,
+  PortLogRuntimeContentWriteInput,
+  PortLogRuntimeEvidenceGetInput,
+  PortLogRuntimeEvidenceListInput,
+  PortLogRuntimeEvidenceRecordInput,
+  PortLogRuntimeFindingListInput,
+  PortLogRuntimeFindingRecordInput,
+  PortLogRuntimeHistoryInput,
+  PortLogRuntimeOpenProjectInput,
+  PortLogRuntimeSessionAttachInput,
+  PortLogRuntimeSessionCreateInput,
+  PortLogRuntimeTurnInput,
 } from "@synara/contracts";
 import {
   autoUpdater,
@@ -212,6 +224,7 @@ import {
   resolveSynaraStorageSnapshotPath,
 } from "./desktopStorageMigration";
 import { DESKTOP_IPC_CHANNELS } from "./ipcChannels";
+import { PortLogRuntimeSupervisor } from "./portlogRuntimeSupervisor";
 import { DesktopAppSnapManager } from "./appSnapManager";
 import { hardenBrowserAnnotationWebviewPreferences } from "./browserAnnotations/webviewSecurity";
 import { LOCAL_HTML_PREVIEW_SCHEME } from "./localHtmlPreviewProtocol";
@@ -307,6 +320,21 @@ const browserPerfLoggingEnabled = process.env.SYNARA_BROWSER_PERF === "1";
 type DesktopUpdateErrorContext = DesktopUpdateState["errorContext"];
 
 let mainWindow: BrowserWindow | null = null;
+const portlogRuntimeSupervisor = new PortLogRuntimeSupervisor({
+  runtimeEntry: resolvePortLogRuntimeEntry(),
+  dataDir: resolvePortLogRuntimeDataDir(),
+  cwd: resolvePortLogRuntimeCwd(),
+});
+portlogRuntimeSupervisor.onStatus((state) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(IPC.portlogRuntime.status, state);
+  }
+});
+portlogRuntimeSupervisor.onEvent((event) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(IPC.portlogRuntime.event, event);
+  }
+});
 let backendProcess: ChildProcess.ChildProcess | null = null;
 let backendPort = 0;
 let backendAuthToken = "";
@@ -1023,6 +1051,18 @@ function resolveBackendCwd(): string {
     return resolveAppRoot();
   }
   return OS.homedir();
+}
+
+function resolvePortLogRuntimeEntry(): string {
+  return Path.join(resolveAppRoot(), "apps/portlog-runtime/dist/index.mjs");
+}
+
+function resolvePortLogRuntimeCwd(): string {
+  return app.isPackaged ? OS.homedir() : resolveAppRoot();
+}
+
+function resolvePortLogRuntimeDataDir(): string {
+  return Path.join(BASE_DIR, "portlog-runtime");
 }
 
 function desktopMigrationRecoveryPaths(): DesktopMigrationRecoveryPaths {
@@ -3385,6 +3425,21 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
   });
 }
 
+function startPortLogRuntime(): void {
+  void portlogRuntimeSupervisor.start().then(
+    (ready) => {
+      writeDesktopLogHeader(
+        `portlog runtime ready instance=${ready.runtimeInstanceId} pi=${ready.piVersion}`,
+      );
+    },
+    (error: unknown) => {
+      const message = formatErrorMessage(error);
+      writeDesktopLogHeader(`portlog runtime failed message=${message}`);
+      console.warn(`[desktop] PortLog runtime failed to start: ${message}`);
+    },
+  );
+}
+
 function takeBackendProcessForShutdown(): ChildProcess.ChildProcess | null {
   cancelBackendReadinessWait();
   backendListeningDetector = null;
@@ -3472,7 +3527,7 @@ async function shutdownDesktopRuntime(reason: string): Promise<void> {
   isQuitting = true;
   writeDesktopLogHeader(`${reason} shutdown start`);
   const shutdown = runAfterDesktopShutdown(
-    stopBackendAndWaitForExit(),
+    Promise.all([stopBackendAndWaitForExit(), portlogRuntimeSupervisor.stop()]).then(() => undefined),
     async () => {
       clearUpdateBackgroundBlurTimer();
       clearUpdateCheckTimeoutTimer();
@@ -3518,6 +3573,105 @@ function requestGracefulAppQuit(reason: string): void {
 
 function registerIpcHandlers(): void {
   const storageSnapshotPath = resolveSynaraStorageSnapshotPath(app.getPath("userData"));
+
+  ipcMain.removeHandler(IPC.portlogRuntime.getStatus);
+  ipcMain.handle(IPC.portlogRuntime.getStatus, () => portlogRuntimeSupervisor.getStatus());
+  ipcMain.removeHandler(IPC.portlogRuntime.health);
+  ipcMain.handle(IPC.portlogRuntime.health, () => portlogRuntimeSupervisor.health());
+  ipcMain.removeHandler(IPC.portlogRuntime.listModels);
+  ipcMain.handle(IPC.portlogRuntime.listModels, () => portlogRuntimeSupervisor.listModels());
+  ipcMain.removeHandler(IPC.portlogRuntime.openProject);
+  ipcMain.handle(
+    IPC.portlogRuntime.openProject,
+    (_event, input: PortLogRuntimeOpenProjectInput) =>
+      portlogRuntimeSupervisor.openProject(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.describeProject);
+  ipcMain.handle(
+    IPC.portlogRuntime.describeProject,
+    (_event, input: { readonly projectId: string }) =>
+      portlogRuntimeSupervisor.describeProject(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.listWorkspace);
+  ipcMain.handle(
+    IPC.portlogRuntime.listWorkspace,
+    (_event, input: { readonly projectId: string; readonly relativePath?: string; readonly includeFiles?: boolean }) =>
+      portlogRuntimeSupervisor.listWorkspace(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.listArtifacts);
+  ipcMain.handle(
+    IPC.portlogRuntime.listArtifacts,
+    (_event, input: { readonly projectId: string }) => portlogRuntimeSupervisor.listArtifacts(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.describeArtifact);
+  ipcMain.handle(
+    IPC.portlogRuntime.describeArtifact,
+    (_event, input: { readonly projectId: string; readonly artifactId: string }) =>
+      portlogRuntimeSupervisor.describeArtifact(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.readContent);
+  ipcMain.handle(
+    IPC.portlogRuntime.readContent,
+    (_event, input: PortLogRuntimeContentReadInput) => portlogRuntimeSupervisor.readContent(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.writeContent);
+  ipcMain.handle(
+    IPC.portlogRuntime.writeContent,
+    (_event, input: PortLogRuntimeContentWriteInput) => portlogRuntimeSupervisor.writeContent(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.recordEvidence);
+  ipcMain.handle(
+    IPC.portlogRuntime.recordEvidence,
+    (_event, input: PortLogRuntimeEvidenceRecordInput) => portlogRuntimeSupervisor.recordEvidence(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.getEvidence);
+  ipcMain.handle(
+    IPC.portlogRuntime.getEvidence,
+    (_event, input: PortLogRuntimeEvidenceGetInput) => portlogRuntimeSupervisor.getEvidence(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.listEvidence);
+  ipcMain.handle(
+    IPC.portlogRuntime.listEvidence,
+    (_event, input: PortLogRuntimeEvidenceListInput) => portlogRuntimeSupervisor.listEvidence(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.recordFinding);
+  ipcMain.handle(
+    IPC.portlogRuntime.recordFinding,
+    (_event, input: PortLogRuntimeFindingRecordInput) => portlogRuntimeSupervisor.recordFinding(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.listFindings);
+  ipcMain.handle(
+    IPC.portlogRuntime.listFindings,
+    (_event, input: PortLogRuntimeFindingListInput) => portlogRuntimeSupervisor.listFindings(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.createSession);
+  ipcMain.handle(
+    IPC.portlogRuntime.createSession,
+    (_event, input: PortLogRuntimeSessionCreateInput) =>
+      portlogRuntimeSupervisor.createSession(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.sendTurn);
+  ipcMain.handle(
+    IPC.portlogRuntime.sendTurn,
+    (_event, input: PortLogRuntimeTurnInput) => portlogRuntimeSupervisor.sendTurn(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.cancelTurn);
+  ipcMain.handle(
+    IPC.portlogRuntime.cancelTurn,
+    (_event, input: { readonly sessionId: string; readonly turnId: string }) =>
+      portlogRuntimeSupervisor.cancelTurn(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.attachSession);
+  ipcMain.handle(
+    IPC.portlogRuntime.attachSession,
+    (_event, input: PortLogRuntimeSessionAttachInput) =>
+      portlogRuntimeSupervisor.attachSession(input),
+  );
+  ipcMain.removeHandler(IPC.portlogRuntime.sessionHistory);
+  ipcMain.handle(
+    IPC.portlogRuntime.sessionHistory,
+    (_event, input: PortLogRuntimeHistoryInput) => portlogRuntimeSupervisor.sessionHistory(input),
+  );
 
   ipcMain.removeAllListeners(IPC.storageMigration.read);
   ipcMain.on(IPC.storageMigration.read, (event: IpcMainEvent) => {
@@ -3571,8 +3725,10 @@ function registerIpcHandlers(): void {
       sourceFilename: Path.basename(resolvedPath),
       sourceSha256: artifact.sourceSha256,
       svgPath: artifact.svgPath,
+      svgContents: FS.readFileSync(artifact.svgPath, "utf8"),
       scenePath: artifact.scenePath,
       diagnosticsPath: artifact.diagnosticsPath,
+      sceneContents: FS.readFileSync(artifact.scenePath, "utf8"),
       cached: artifact.cached,
     };
   });
@@ -4318,6 +4474,8 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     console.warn("[Synara browser] Failed to start browser host pipe", error);
   }
+  startPortLogRuntime();
+  writeDesktopLogHeader("bootstrap PortLog runtime start requested");
   startBackend();
   writeDesktopLogHeader("bootstrap backend start requested");
 

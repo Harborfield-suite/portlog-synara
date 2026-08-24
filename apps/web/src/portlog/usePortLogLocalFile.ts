@@ -6,25 +6,30 @@ import {
   projectReadFileQueryOptions,
 } from "~/lib/projectReactQuery";
 
-export function usePortLogLocalFile(path: string) {
+export function usePortLogLocalFile(
+  path: string,
+  inlineContents?: string,
+  workspaceRoot?: string | null,
+) {
+  const readsWorkspace = workspaceRoot !== undefined && workspaceRoot !== null;
   const grantQuery = useQuery(
     projectLocalPreviewGrantQueryOptions({
       path,
-      enabled: path.length > 0,
+      enabled: path.length > 0 && inlineContents === undefined && !readsWorkspace,
     }),
   );
   const grant = isLocalPreviewGrantUsable(grantQuery.data) ? grantQuery.data?.grant : null;
   const fileQuery = useQuery(
     projectReadFileQueryOptions({
-      cwd: null,
+      cwd: workspaceRoot ?? null,
       relativePath: path,
       previewGrant: grant,
-      enabled: grant !== null,
+      enabled: inlineContents === undefined && (readsWorkspace || grant !== null),
     }),
   );
 
   return {
-    contents: fileQuery.data?.contents ?? null,
+    contents: inlineContents ?? fileQuery.data?.contents ?? null,
     grantQuery,
     fileQuery,
   };

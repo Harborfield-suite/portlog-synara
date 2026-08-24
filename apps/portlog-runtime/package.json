@@ -1,0 +1,30 @@
+{
+  "name": "@synara/portlog-runtime",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "live-smoke": "bun run build && bun run src/liveSmoke.ts",
+    "baseline": "bun run build && bun run src/dexpiBaseline.ts",
+    "product-proof": "bun run build && bun run src/productProof.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.81.1",
+    "@earendil-works/pi-coding-agent": "0.81.1",
+    "@synara/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "portlog": {
+    "piVersion": "0.81.1"
+  }
+}

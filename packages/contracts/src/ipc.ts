@@ -13,6 +13,37 @@ import type {
   AuthWebSocketTokenResult,
 } from "./auth";
 import type {
+  PortLogRuntimeArtifact,
+  PortLogRuntimeArtifactDescription,
+  PortLogRuntimeContentReadInput,
+  PortLogRuntimeContentReadResult,
+  PortLogRuntimeContentWriteInput,
+  PortLogRuntimeContentWriteResult,
+  PortLogRuntimeEvent,
+  PortLogRuntimeEvidence,
+  PortLogRuntimeEvidenceGetInput,
+  PortLogRuntimeEvidenceListInput,
+  PortLogRuntimeEvidenceRecordInput,
+  PortLogRuntimeFinding,
+  PortLogRuntimeFindingListInput,
+  PortLogRuntimeFindingRecordInput,
+  PortLogRuntimeHealth,
+  PortLogRuntimeHistoryInput,
+  PortLogRuntimeHistoryPage,
+  PortLogRuntimeModel,
+  PortLogRuntimeOpenProjectInput,
+  PortLogRuntimeProject,
+  PortLogRuntimeProjectDescription,
+  PortLogRuntimeSession,
+  PortLogRuntimeSessionAttachInput,
+  PortLogRuntimeSessionCreateInput,
+  PortLogRuntimeSessionSnapshot,
+  PortLogRuntimeState,
+  PortLogRuntimeTurnAccepted,
+  PortLogRuntimeTurnInput,
+  PortLogRuntimeWorkspaceListResult,
+} from "./portlogRuntime";
+import type {
   ExternalMcpCreateIntegrationInput,
   ExternalMcpCreateIntegrationResult,
   ExternalMcpIntegration,
@@ -499,8 +530,10 @@ export interface DesktopDexpiImportResult {
   readonly sourceFilename: string;
   readonly sourceSha256: string;
   readonly svgPath: string;
+  readonly svgContents: string;
   readonly scenePath: string;
   readonly diagnosticsPath: string;
+  readonly sceneContents: string;
   readonly cached: boolean;
 }
 
@@ -571,6 +604,37 @@ export interface DesktopBridge {
   };
   dexpi: {
     importSource: (input?: DesktopDexpiImportInput) => Promise<DesktopDexpiImportResult | null>;
+  };
+  portlogRuntime?: {
+    getStatus: () => Promise<PortLogRuntimeState>;
+    health: () => Promise<PortLogRuntimeHealth>;
+    listModels: () => Promise<ReadonlyArray<PortLogRuntimeModel>>;
+    openProject: (input: PortLogRuntimeOpenProjectInput) => Promise<PortLogRuntimeProject>;
+    describeProject: (input: { readonly projectId: string }) => Promise<PortLogRuntimeProjectDescription>;
+    listWorkspace: (input: {
+      readonly projectId: string;
+      readonly relativePath?: string;
+      readonly includeFiles?: boolean;
+    }) => Promise<PortLogRuntimeWorkspaceListResult>;
+    listArtifacts: (input: { readonly projectId: string }) => Promise<ReadonlyArray<PortLogRuntimeArtifact>>;
+    describeArtifact: (input: {
+      readonly projectId: string;
+      readonly artifactId: string;
+    }) => Promise<PortLogRuntimeArtifactDescription>;
+    readContent: (input: PortLogRuntimeContentReadInput) => Promise<PortLogRuntimeContentReadResult>;
+    writeContent: (input: PortLogRuntimeContentWriteInput) => Promise<PortLogRuntimeContentWriteResult>;
+    recordEvidence: (input: PortLogRuntimeEvidenceRecordInput) => Promise<PortLogRuntimeEvidence>;
+    getEvidence: (input: PortLogRuntimeEvidenceGetInput) => Promise<PortLogRuntimeEvidence>;
+    listEvidence: (input: PortLogRuntimeEvidenceListInput) => Promise<ReadonlyArray<PortLogRuntimeEvidence>>;
+    recordFinding: (input: PortLogRuntimeFindingRecordInput) => Promise<PortLogRuntimeFinding>;
+    listFindings: (input: PortLogRuntimeFindingListInput) => Promise<ReadonlyArray<PortLogRuntimeFinding>>;
+    createSession: (input: PortLogRuntimeSessionCreateInput) => Promise<PortLogRuntimeSession>;
+    sendTurn: (input: PortLogRuntimeTurnInput) => Promise<PortLogRuntimeTurnAccepted>;
+    cancelTurn: (input: { readonly sessionId: string; readonly turnId: string }) => Promise<{ accepted: true }>;
+    attachSession: (input: PortLogRuntimeSessionAttachInput) => Promise<PortLogRuntimeSessionSnapshot>;
+    sessionHistory: (input: PortLogRuntimeHistoryInput) => Promise<PortLogRuntimeHistoryPage>;
+    onStatus: (listener: (state: PortLogRuntimeState) => void) => () => void;
+    onEvent: (listener: (event: PortLogRuntimeEvent) => void) => () => void;
   };
   server?: {
     transcribeVoice: (

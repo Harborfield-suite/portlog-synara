@@ -90,6 +90,7 @@ import {
 } from "../supervisedProcessTeardown.ts";
 
 const PROVIDER = "pi" as const;
+const PI_WORKSPACE_TOOL_NAMES = ["read", "write", "edit", "bash"] as const;
 const DEFAULT_PI_THINKING_LEVEL: ThinkingLevel = "medium";
 const PI_THINKING_OPTIONS: ReadonlyArray<{
   readonly value: ThinkingLevel;
@@ -2102,6 +2103,7 @@ const makePiAdapter = (options?: PiAdapterLiveOptions) =>
             ...(sessionStartEvent ? { sessionStartEvent } : {}),
             ...(model ? { model } : {}),
             thinkingLevel: input.thinkingLevel ?? DEFAULT_PI_THINKING_LEVEL,
+            tools: [...PI_WORKSPACE_TOOL_NAMES],
             customTools: [
               input.sdk.defineTool(
                 input.sdk.createBashToolDefinition(cwd, {

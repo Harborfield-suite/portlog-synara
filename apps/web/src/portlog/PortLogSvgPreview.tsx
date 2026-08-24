@@ -69,6 +69,8 @@ function sanitizeSvgMarkup(contents: string, selectedEntityId: string | null): s
 
 export function PortLogSvgPreview(props: {
   svgPath: string;
+  svgContents?: string;
+  workspaceRoot?: string | null;
   className?: string;
   selectedEntityId?: string | null;
   onEntitySelect?: (entityId: string | null) => void;
@@ -76,7 +78,11 @@ export function PortLogSvgPreview(props: {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  const { contents, grantQuery, fileQuery } = usePortLogLocalFile(props.svgPath);
+  const { contents, grantQuery, fileQuery } = usePortLogLocalFile(
+    props.svgPath,
+    props.svgContents,
+    props.workspaceRoot,
+  );
   const markup = useMemo(
     () => (contents ? sanitizeSvgMarkup(contents, props.selectedEntityId ?? null) : null),
     [contents, props.selectedEntityId],

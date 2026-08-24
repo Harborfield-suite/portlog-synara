@@ -125,7 +125,7 @@ export function gitGithubRepositoryQueryOptions(cwd: string | null, enabled = tr
   });
 }
 
-export function gitBranchesQueryOptions(cwd: string | null) {
+export function gitBranchesQueryOptions(cwd: string | null, enabled = true) {
   return queryOptions({
     queryKey: gitQueryKeys.branches(cwd),
     queryFn: async () => {
@@ -133,7 +133,7 @@ export function gitBranchesQueryOptions(cwd: string | null) {
       if (!cwd) throw new Error("Git branches are unavailable.");
       return api.git.listBranches({ cwd });
     },
-    enabled: cwd !== null,
+    enabled: enabled && cwd !== null,
     staleTime: GIT_BRANCHES_STALE_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,

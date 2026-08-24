@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import {
   createDevRunnerEnv,
   findFirstAvailableOffset,
+  MODE_ARGS,
   readDevRunnerBooleanEnvironment,
   resolveDevRunnerBooleanOverrides,
   resolveModePortOffsets,
@@ -15,6 +16,10 @@ import {
 } from "./dev-runner.ts";
 
 it.layer(NodeServices.layer)("dev-runner", (it) => {
+  it("keeps the Synara server out of desktop mode", () => {
+    assert.ok(!MODE_ARGS["dev:desktop"].includes("--filter=@synara/cli"));
+  });
+
   it("allows every generated runtime setting through Turbo", () => {
     const turboConfig = JSON.parse(
       readFileSync(new URL("../turbo.json", import.meta.url), "utf8"),
@@ -34,6 +39,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       "SYNARA_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
       "VITE_WS_URL",
       "VITE_DEV_SERVER_URL",
+      "PORTLOG_OPENROUTER_API_KEY",
+      "OPENROUTER_API_KEY",
+      "PORTLOG_OPENAI_API_KEY",
+      "OPENAI_API_KEY",
     ]) {
       assert.ok(globalEnv.has(name), `${name} must be declared in turbo.json globalEnv`);
     }

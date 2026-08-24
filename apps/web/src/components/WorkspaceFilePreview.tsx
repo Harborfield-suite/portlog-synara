@@ -59,6 +59,8 @@ import {
 } from "~/lib/syntaxHighlighting";
 import { cn } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
+import { getPortLogWorkspaceSource } from "~/portlog/portlogWorkspaceSource";
+import { getPortLogWorkspaceByRoot } from "~/portlog/portlogWorkspaceStore";
 import ChatMarkdown from "./ChatMarkdown";
 import { FileLineCommentBox } from "./chat/FileLineCommentBox";
 import { PanelStateMessage } from "./chat/PanelStateMessage";
@@ -71,6 +73,33 @@ import { PdfFilePreview } from "./PdfFilePreview";
 import { Skeleton } from "./ui/skeleton";
 
 const MARKDOWN_PREVIEW_EXTENSIONS = new Set([".markdown", ".md", ".mdx"]);
+
+type WorkspaceFileWriteInput = {
+  readonly cwd: string;
+  readonly relativePath: string;
+  readonly contents: string;
+  readonly expectedVersion?: string | null;
+  readonly encoding?: ProjectFileEncoding | null;
+  readonly lineEnding?: ProjectFileLineEnding | null;
+};
+
+async function writeWorkspaceFile(input: WorkspaceFileWriteInput) {
+  const workspace = getPortLogWorkspaceByRoot(input.cwd);
+  const portlog = workspace ? getPortLogWorkspaceSource() : null;
+  if (portlog && workspace) {
+    return portlog.writeFile(workspace, input.relativePath, input.contents, input.expectedVersion);
+  }
+  const api = readNativeApi();
+  if (!api) throw new Error("File saving is unavailable.");
+  return api.projects.writeFile({
+    cwd: input.cwd,
+    relativePath: input.relativePath,
+    contents: input.contents,
+    ...(input.expectedVersion ? { expectedVersion: input.expectedVersion } : {}),
+    ...(input.encoding ? { encoding: input.encoding } : {}),
+    ...(input.lineEnding ? { lineEnding: input.lineEnding } : {}),
+  });
+}
 
 export function isMarkdownPreviewablePath(filePath: string): boolean {
   const extension = lowerCaseExtensionOf(filePath);
@@ -547,15 +576,6 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     ) {
       return;
     }
-    const api = readNativeApi();
-    if (!api) {
-      setEditBuffer((current) => ({
-        ...resolveFileEditBuffer(current, editableDocument),
-        error: "File saving is unavailable.",
-      }));
-      return;
-    }
-
     const documentKey = activeEditBuffer.key;
     const contentsToSave = activeEditBuffer.contents;
     const expectedVersion = activeEditBuffer.version;
@@ -566,7 +586,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     }));
 
     try {
-      const result = await api.projects.writeFile({
+      const result = await writeWorkspaceFile({
         cwd: workspaceRoot,
         relativePath: activeEditBuffer.relativePath,
         contents: contentsToSave,
@@ -696,12 +716,6 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     if (nextContents === null) {
       return;
     }
-    // No API means no write can happen — bail before the optimistic update
-    // so the preview never shows a toggle that was silently dropped.
-    const api = readNativeApi();
-    if (!api) {
-      return;
-    }
     queryClient.setQueryData(options.queryKey, { ...current, contents: nextContents });
     // The read RPC may have resolved a bare/partial reference (e.g. a clicked
     // `notes.md`) to its real nested path. Write back to that resolved path,
@@ -720,7 +734,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     taskWriteQueueRef.current = taskWriteQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const result = await api.projects.writeFile({
+        const result = await writeWorkspaceFile({
           cwd: workspaceRoot,
           relativePath: writeRelativePath,
           contents: nextContents,

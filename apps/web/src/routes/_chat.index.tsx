@@ -15,6 +15,8 @@ import {
 import { readSidebarUiState } from "../components/Sidebar.uiState";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { PortLogWorkspaceLauncher } from "../components/PortLogWorkspaceLauncher";
+import type { PortLogWorkspace } from "../portlog/portlogWorkspaceSource";
+import { usePortLogWorkspaceStore } from "../portlog/portlogWorkspaceStore";
 import { useHandleNewChat } from "../hooks/useHandleNewChat";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { VOID_SPACE_KEY } from "../lib/spaceGrouping";
@@ -49,6 +51,7 @@ function ChatIndexRouteView() {
   const sidebarThreadSummaryById = useStore((state) => state.sidebarThreadSummaryById);
   const draftThreadsByThreadId = useComposerDraftStore((state) => state.draftThreadsByThreadId);
   const homeDir = useWorkspacePathsStore((state) => state.homeDir);
+  const openPortLogWorkspace = usePortLogWorkspaceStore((state) => state.openWorkspace);
   const chatWorkspaceRoot = useWorkspacePathsStore((state) => state.chatWorkspaceRoot);
   const studioWorkspaceRoot = useWorkspacePathsStore((state) => state.studioWorkspaceRoot);
   // A Space landing reuses the stored home-chat draft instead of minting one (same reasoning as
@@ -81,6 +84,18 @@ function ChatIndexRouteView() {
     [handleNewThread, navigate, sidebarThreadSummaryById, threadIds],
   );
 
+  const openPortLogProject = useCallback(
+    async (workspace: PortLogWorkspace, name: string) => {
+      openPortLogWorkspace(workspace, name);
+      await handleNewThread(
+        ProjectId.makeUnsafe(workspace.projectId),
+        { envMode: "local" },
+        { search: () => ({ view: "editor" }) },
+      );
+    },
+    [handleNewThread, openPortLogWorkspace],
+  );
+
   const renderWorkspaceLauncher = useCallback(
     () => (
       <PortLogWorkspaceLauncher
@@ -89,9 +104,10 @@ function ChatIndexRouteView() {
         activeSpaceId={activeSpaceId}
         homeDir={homeDir}
         onOpenProject={openProject}
+        onOpenPortLogWorkspace={openPortLogProject}
       />
     ),
-    [activeSpaceId, homeDir, openProject, projects, spaces],
+    [activeSpaceId, homeDir, openPortLogProject, openProject, projects, spaces],
   );
 
   const workspacePaths = { homeDir, chatWorkspaceRoot, studioWorkspaceRoot };

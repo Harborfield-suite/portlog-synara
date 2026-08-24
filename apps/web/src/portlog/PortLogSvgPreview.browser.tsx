@@ -9,8 +9,8 @@ const harness = vi.hoisted(() => ({
 }));
 
 vi.mock("./usePortLogLocalFile", () => ({
-  usePortLogLocalFile: () => ({
-    contents: harness.contents,
+  usePortLogLocalFile: (_path: string, inlineContents?: string) => ({
+    contents: inlineContents ?? harness.contents,
     grantQuery: { isPending: false, error: null },
     fileQuery: { isPending: false, error: null },
   }),
@@ -25,5 +25,17 @@ describe("PortLogSvgPreview", () => {
     const svg = page.getByTestId("portlog-svg-canvas").element().querySelector("svg");
     expect(svg).not.toBeNull();
     expect(svg?.querySelector('[data-id="P-101"]')).not.toBeNull();
+  });
+
+  it("accepts renderer output inline from the desktop bridge", async () => {
+    await render(
+      <PortLogSvgPreview
+        svgPath="artifact/rendered.svg"
+        svgContents='<svg viewBox="0 0 10 10"><rect data-id="inline" width="10" height="10" /></svg>'
+      />,
+    );
+
+    const svg = page.getByTestId("portlog-svg-canvas").element().querySelector("svg");
+    expect(svg?.querySelector('[data-id="inline"]')).not.toBeNull();
   });
 });

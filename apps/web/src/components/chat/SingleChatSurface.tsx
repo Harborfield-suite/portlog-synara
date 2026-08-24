@@ -77,6 +77,8 @@ import {
 } from "../../storeSelectors";
 import { sortThreadsForSidebar } from "../Sidebar.logic";
 import { ChatPaneDropOverlay } from "../chat-drop-overlay/ChatPaneDropOverlay";
+import { PortLogRuntimeChatPanel } from "../../portlog/PortLogRuntimeChatPanel";
+import { usePortLogWorkspaceStore } from "../../portlog/portlogWorkspaceStore";
 import {
   ChatMountLoader,
   DeferredChatView,
@@ -200,6 +202,15 @@ export function SingleChatSurface(props: {
   const activeProject = useStore(
     useMemo(() => createProjectSelector(props.projectId), [props.projectId]),
   );
+  const portLogWorkspace = usePortLogWorkspaceStore(
+    useMemo(
+      () =>
+        (state) =>
+          props.projectId ? state.workspacesByProjectId[props.projectId] ?? null : null,
+      [props.projectId],
+    ),
+  );
+  const isPortLogWorkspace = portLogWorkspace !== null;
   const threadWorkspaceMetadata = useStore(
     useMemo(() => createThreadWorkspaceMetadataSelector(props.threadId), [props.threadId]),
   );
@@ -214,13 +225,15 @@ export function SingleChatSurface(props: {
   // File preview must follow the same runtime cwd as chat markdown, diffs, and git:
   // worktree-backed threads resolve links against their materialized worktree.
   const workspaceRoot = resolveFilePreviewWorkspaceRoot({
-    projectCwd: activeProject?.cwd ?? null,
+    projectCwd: portLogWorkspace?.root ?? activeProject?.cwd ?? null,
     threadEnvMode: threadWorkspaceMetadata.envMode ?? draftThread?.envMode ?? null,
     threadWorktreePath: threadWorkspaceMetadata.worktreePath ?? draftThread?.worktreePath ?? null,
     threadWorkingDirectory:
       threadWorkspaceMetadata.workingDirectory ?? draftThread?.workingDirectory ?? null,
   });
-  const dockGitRepositoryQuery = useQuery(gitBranchesQueryOptions(workspaceRoot));
+  const dockGitRepositoryQuery = useQuery(
+    gitBranchesQueryOptions(workspaceRoot, !isPortLogWorkspace),
+  );
   const hasGitRepository = dockGitRepositoryQuery.data?.isRepo === true;
   const dockDiffTotals = useRepoDiffTotals({
     gitCwd: workspaceRoot,
@@ -244,7 +257,8 @@ export function SingleChatSurface(props: {
   const [editorCenterMode, setEditorCenterMode] = useState<"file" | "diff" | "drawing">(() =>
     props.search.editorFilePath
       ? "file"
-      : (readEditorViewState(props.threadId)?.centerMode ?? "diff"),
+      : (readEditorViewState(props.threadId)?.centerMode ??
+        (isPortLogWorkspace ? "drawing" : "diff")),
   );
   // This route component is reused across thread navigations; reload the
   // persisted editor view state when the thread changes.
@@ -260,16 +274,23 @@ export function SingleChatSurface(props: {
     // elsewhere, so deriving here would mean stamping the thread key in every one.
     const timer = window.setTimeout(() => {
       setEditorExpandedDirectories(new Set(persisted?.expandedDirectories ?? []));
-      setEditorCenterMode(props.search.editorFilePath ? "file" : (persisted?.centerMode ?? "diff"));
+      setEditorCenterMode(
+        props.search.editorFilePath
+          ? "file"
+          : (persisted?.centerMode ?? (isPortLogWorkspace ? "drawing" : "diff")),
+      );
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [props.search.editorFilePath, props.threadId]);
+  }, [isPortLogWorkspace, props.search.editorFilePath, props.threadId]);
   const editorViewActive = shouldRenderProjectEditorView({
     view: props.search.view,
-    projectKind: activeProject?.kind,
+    projectKind: activeProject?.kind ?? (isPortLogWorkspace ? "project" : null),
   });
   useEffect(() => {
-    if (props.search.view !== undefined || activeProject?.kind !== "project") {
+    if (
+      props.search.view !== undefined ||
+      (activeProject?.kind !== "project" && !isPortLogWorkspace)
+    ) {
       return;
     }
     void navigate({
@@ -281,7 +302,7 @@ export function SingleChatSurface(props: {
         view: "editor",
       }),
     });
-  }, [activeProject?.kind, navigate, props.search.view, props.threadId]);
+  }, [activeProject?.kind, isPortLogWorkspace, navigate, props.search.view, props.threadId]);
   useEffect(() => {
     if (!editorViewActive) {
       return;
@@ -1009,9 +1030,9 @@ export function SingleChatSurface(props: {
           <Suspense fallback={<ChatMountLoader />}>
             <EditorWorkspaceView
               workspaceRoot={workspaceRoot}
-              projectName={activeProject?.name ?? null}
-              currentProjectId={activeProject?.id ?? null}
-              projectOptions={editorProjectOptions}
+              projectName={activeProject?.name ?? portLogWorkspace?.name ?? null}
+              currentProjectId={activeProject?.id ?? props.projectId}
+              projectOptions={isPortLogWorkspace ? [] : editorProjectOptions}
               selectedFilePath={selectedEditorFilePath}
               expandedDirectories={editorExpandedDirectories}
               centerMode={editorCenterMode}
@@ -1039,31 +1060,40 @@ export function SingleChatSurface(props: {
                   liveRefreshEnabled={editorCenterMode === "diff"}
                   // Keep diff data warm while browsing files so switching to the
                   // diff tab renders instantly instead of cold-fetching.
-                  queriesEnabled
+                  queriesEnabled={!isPortLogWorkspace}
                   hideHeader
                   onRenderableFilesChange={handleEditorDiffFilesChange}
                   onEditorDiffOptionsChange={handleEditorDiffOptionsChange}
                 />
               }
               chatPanel={
-                <SidebarInset
-                  className="min-h-0 min-w-0 overflow-hidden overscroll-y-none text-foreground"
-                  surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}
-                >
-                  <DeferredChatView
-                    threadId={props.threadId}
-                    paneScopeId={EDITOR_CHAT_PANE_SCOPE_ID}
-                    deferMount={false}
-                    surfaceMode="split"
-                    presentationMode="editor"
-                    isFocusedPane
-                    panelState={editorChatPanelState}
-                    onToggleDiff={handleEditorToggleDiff}
-                    onToggleBrowser={noopChatSurfaceAction}
-                    onOpenBrowserUrl={noopChatSurfaceAction}
-                    onOpenTurnDiff={handleEditorOpenTurnDiff}
+                typeof window !== "undefined" && window.desktopBridge?.portlogRuntime ? (
+                  <PortLogRuntimeChatPanel
+                    workspaceRoot={workspaceRoot}
+                    onOpenEvidence={(_evidenceId, sourcePath) => {
+                      if (sourcePath) handleDoubleClickEditorFile(sourcePath);
+                    }}
                   />
-                </SidebarInset>
+                ) : (
+                  <SidebarInset
+                    className="min-h-0 min-w-0 overflow-hidden overscroll-y-none text-foreground"
+                    surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}
+                  >
+                    <DeferredChatView
+                      threadId={props.threadId}
+                      paneScopeId={EDITOR_CHAT_PANE_SCOPE_ID}
+                      deferMount={false}
+                      surfaceMode="split"
+                      presentationMode="editor"
+                      isFocusedPane
+                      panelState={editorChatPanelState}
+                      onToggleDiff={handleEditorToggleDiff}
+                      onToggleBrowser={noopChatSurfaceAction}
+                      onOpenBrowserUrl={noopChatSurfaceAction}
+                      onOpenTurnDiff={handleEditorOpenTurnDiff}
+                    />
+                  </SidebarInset>
+                )
               }
             />
           </Suspense>
