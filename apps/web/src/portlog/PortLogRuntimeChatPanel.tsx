@@ -11,9 +11,17 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "../components/ComposerPromptEditor";
+import { ComposerColumnFrame } from "../components/chat/ComposerColumnFrame";
 import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
+import {
+  COMPOSER_EDITOR_PADDING_CLASS_NAME,
+  COMPOSER_FOOTER_ROW_CLASS_NAME,
+  COMPOSER_INPUT_SHELL_CLASS_NAME,
+  COMPOSER_INPUT_SURFACE_CLASS_NAME,
+} from "../components/chat/composerPickerStyles";
 import type { ProviderModelOption } from "../providerModelOptions";
 import { ArrowUpIcon, StopIcon } from "../lib/icons";
+import { cn } from "../lib/utils";
 import { getPortLogRuntimeClient, type PortLogRuntimeClient } from "./portlogRuntimeClient";
 import { PortLogEvidenceInspector } from "./PortLogEvidenceInspector";
 import { MessagesTimeline } from "../components/chat/MessagesTimeline";
@@ -406,59 +414,65 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
           </div>
         }
       />
-      <footer className="shrink-0 border-t border-border/65 px-3 py-3">
-        <div className="rounded-xl border border-border/85 bg-muted/15 p-2 shadow-sm focus-within:border-ring/70 focus-within:bg-muted/25">
-          <ComposerPromptEditor
-            ref={composerEditorRef}
-            value={draft}
-            cursor={composerCursor}
-            terminalContexts={[]}
-            mentionReferences={[]}
-            disabled={Boolean(activeTurnId)}
-            placeholder={modelNeedsAuth ? "Add an OpenRouter key to send…" : "Ask PortLog…"}
-            className="px-1 py-1 text-sm"
-            onRemoveTerminalContext={() => undefined}
-            onChange={(nextValue, nextCursor) => {
-              setError(null);
-              setDraft(nextValue);
-              setComposerCursor(nextCursor);
-            }}
-            onCommandKeyDown={(key, event) => {
-              if (key === "Enter" && !event.shiftKey && canSend) {
-                void send();
-                return true;
-              }
-              return false;
-            }}
-            onPaste={() => undefined}
-          />
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="truncate text-[10px] text-muted-foreground/70">Enter to send · Shift+Enter for a new line · Escape to cancel</span>
-            <div className="flex items-center gap-1">
-              {activeTurnId ? (
-                <button
-                  type="button"
-                  aria-label="Cancel turn"
-                  title="Cancel turn"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => void cancel()}
-                >
-                  <StopIcon className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                aria-label="Send prompt"
-                title="Send prompt"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                disabled={!canSend}
-                onClick={() => void send()}
-              >
-                <ArrowUpIcon className="h-4 w-4" />
-              </button>
+      <footer className="shrink-0 px-3 pb-3 pt-0">
+        <ComposerColumnFrame>
+          <div className={COMPOSER_INPUT_SHELL_CLASS_NAME}>
+            <div className={cn(COMPOSER_INPUT_SURFACE_CLASS_NAME, "overflow-hidden") }>
+              <div className={COMPOSER_EDITOR_PADDING_CLASS_NAME}>
+                <ComposerPromptEditor
+                  ref={composerEditorRef}
+                  value={draft}
+                  cursor={composerCursor}
+                  terminalContexts={[]}
+                  mentionReferences={[]}
+                  disabled={Boolean(activeTurnId)}
+                  placeholder={modelNeedsAuth ? "Add an OpenRouter key to send…" : "Ask PortLog…"}
+                  className="text-sm"
+                  onRemoveTerminalContext={() => undefined}
+                  onChange={(nextValue, nextCursor) => {
+                    setError(null);
+                    setDraft(nextValue);
+                    setComposerCursor(nextCursor);
+                  }}
+                  onCommandKeyDown={(key, event) => {
+                    if (key === "Enter" && !event.shiftKey && canSend) {
+                      void send();
+                      return true;
+                    }
+                    return false;
+                  }}
+                  onPaste={() => undefined}
+                />
+              </div>
+              <div className={cn(COMPOSER_FOOTER_ROW_CLASS_NAME, "gap-2") }>
+                <span className="truncate text-[10px] text-muted-foreground/70">Enter to send · Shift+Enter for a new line · Escape to cancel</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  {activeTurnId ? (
+                    <button
+                      type="button"
+                      aria-label="Cancel turn"
+                      title="Cancel turn"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => void cancel()}
+                    >
+                      <StopIcon className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    aria-label="Send prompt"
+                    title="Send prompt"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    disabled={!canSend}
+                    onClick={() => void send()}
+                  >
+                    <ArrowUpIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </ComposerColumnFrame>
       </footer>
     </section>
   );
