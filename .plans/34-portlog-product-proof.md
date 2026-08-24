@@ -15,6 +15,6 @@ Fixture: `ha-c01-centrifugal-pumps-retrieval`
 - `bun run --cwd apps/web test:browser src/portlog`: 2/2 passed.
 - Covered PortLog coupling audit found no `NativeApi`, `readNativeApi`, `ensureNativeApi`, `@synara/server`, or `apps/server` references.
 
-Renderer reload recovery is implemented in `PortLogRuntimeChatPanel`: stored sessions attach on mount, snapshots install before pending events, and `streamId`/`cursor` filter replay. Runtime restart and interrupted-turn recovery are exercised by the product proof above.
+Renderer reload recovery is implemented in `PortLogRuntimeChatPanel`: stored sessions attach on mount, snapshots install before pending events, and `streamId`/`cursor` filter replay. Runtime transcript events, including user messages, are now persisted so restart recovery restores the conversation rather than only turn state. The panel uses the existing Synara composer/markdown primitives, near-bottom scroll behavior, a jump-to-latest affordance, and Escape cancellation. Runtime restart and interrupted-turn recovery are exercised by the product proof above.
 
 The run uses the explicit OpenRouter fallback documented for PortLog; no Synara server or legacy provider path is started.

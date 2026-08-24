@@ -270,6 +270,7 @@ function emitRuntimeEvent(event: PortLogRuntimeEvent): void {
   buffer.push(normalized);
   if (buffer.length > MAX_SESSION_EVENTS) buffer.splice(0, buffer.length - MAX_SESSION_EVENTS);
   sessionEventBuffers.set(event.sessionId, buffer);
+  controlStore?.saveEvent(normalized);
   if (normalized.type === "turn.completed" && normalized.turnId) {
     controlStore?.setTurnState(normalized.turnId, normalized.state);
   }
@@ -283,13 +284,17 @@ function sessionSnapshot(
   if (!session || !driver) throw new Error(`Session '${input.sessionId}' was not found.`);
   const streamId = driver.getStreamId(input.sessionId);
   const buffer = sessionEventBuffers.get(input.sessionId) ?? [];
-  const cursor = streamCursors.get(streamId) ?? 0;
+  const persisted = controlStore?.listEvents(input.sessionId, MAX_SESSION_EVENTS) ?? [];
+  const sourceEvents = buffer.length > 0
+    ? buffer
+    : persisted.map((event, index) => ({ ...event, streamId, cursor: index + 1 }));
+  const cursor = buffer.length > 0 ? (streamCursors.get(streamId) ?? 0) : sourceEvents.length;
   const requestedCursor = input.afterCursor ?? 0;
   const canReplay = input.streamId === streamId &&
-    (buffer.length === 0 || requestedCursor >= (buffer[0]?.cursor ?? 0) - 1);
+    (sourceEvents.length === 0 || requestedCursor >= (sourceEvents[0]?.cursor ?? 0) - 1);
   const events = canReplay
-    ? buffer.filter((event) => event.cursor > requestedCursor)
-    : buffer.slice(-MAX_SESSION_EVENTS);
+    ? sourceEvents.filter((event) => event.cursor > requestedCursor)
+    : sourceEvents.slice(-MAX_SESSION_EVENTS);
   const latestState = controlStore?.getLatestTurnState(input.sessionId);
   const activeTurnId = driver.getActiveTurnId(input.sessionId) ?? undefined;
   return {
@@ -575,6 +580,14 @@ async function sendTurn(params: unknown): Promise<PortLogRuntimeTurnAccepted> {
     requestFingerprint,
     modelRef,
     thinkingLevel,
+  });
+  emitRuntimeEvent({
+    streamId: driver.getStreamId(sessionId),
+    cursor: 0,
+    sessionId,
+    turnId,
+    type: "user.message",
+    text,
   });
 
   try {

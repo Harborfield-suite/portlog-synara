@@ -6,12 +6,13 @@ import {
   type PortLogRuntimeEvidence,
   type PortLogRuntimeModel,
 } from "@synara/contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ChatMarkdown from "../components/ChatMarkdown";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "../components/ComposerPromptEditor";
 import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
 import type { ProviderModelOption } from "../providerModelOptions";
+import { isScrollContainerNearBottom } from "../chat-scroll";
 import { ArrowUpIcon, StopIcon } from "../lib/icons";
 import { getPortLogRuntimeClient, type PortLogRuntimeClient } from "./portlogRuntimeClient";
 import { PortLogEvidenceInspector } from "./PortLogEvidenceInspector";
@@ -51,6 +52,10 @@ function modelOptions(models: ReadonlyArray<PortLogRuntimeModel>): Record<Provid
 
 function applyEvent(rows: ReadonlyArray<TranscriptRow>, event: PortLogRuntimeEvent): TranscriptRow[] {
   switch (event.type) {
+    case "user.message":
+      return rows.some((row) => row.id === event.turnId)
+        ? [...rows]
+        : [...rows, { id: event.turnId ?? newId("user"), role: "user", text: event.text }];
     case "assistant.delta": {
       const last = rows.at(-1);
       if (last?.role === "assistant") {
@@ -94,6 +99,9 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const [status, setStatus] = useState("Starting runtime…");
   const [error, setError] = useState<string | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const [followTranscript, setFollowTranscript] = useState(true);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const recoveryRef = useRef<{
     readonly sessionId: string;
     readonly pending: PortLogRuntimeEvent[];
@@ -102,6 +110,13 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
 
   const options = useMemo(() => modelOptions(models), [models]);
   const selectedRuntimeModel = models.find((model) => model.ref === selectedModel) ?? null;
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const node = transcriptRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior });
+    setFollowTranscript(true);
+    setShowScrollToLatest(false);
+  }, []);
   const canSend = Boolean(
     client &&
       props.workspaceRoot &&
@@ -110,6 +125,13 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
       selectedRuntimeModel?.status === "ready",
   );
   const modelNeedsAuth = selectedRuntimeModel?.status === "needs_auth";
+
+  useEffect(() => {
+    const node = transcriptRef.current;
+    if (!node || (!followTranscript && !activeTurnId)) return;
+    node.scrollTop = node.scrollHeight;
+    setShowScrollToLatest(false);
+  }, [activeTurnId, followTranscript, rows]);
 
   useEffect(() => {
     if (!client || !props.workspaceRoot) return;
@@ -266,6 +288,17 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
     });
   };
 
+  useEffect(() => {
+    if (!client || !sessionId || !activeTurnId) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      void cancel();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [activeTurnId, client, sessionId]);
+
   const openEvidence = async (evidence: PortLogRuntimeEvidence) => {
     if (!client || !projectId) return;
     const artifact = evidence.artifactId
@@ -310,7 +343,17 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         projectId={projectId}
         onOpenEvidence={(evidence) => void openEvidence(evidence)}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 text-sm">
+      <div
+        ref={transcriptRef}
+        data-chat-scroll-container="true"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-5 text-sm"
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          const nearBottom = isScrollContainerNearBottom(node);
+          setFollowTranscript(nearBottom);
+          setShowScrollToLatest(!nearBottom);
+        }}
+      >
         {rows.length === 0 ? (
           <div className="mx-auto flex h-full max-w-sm flex-col justify-center text-center">
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-muted/30 text-xs font-semibold text-muted-foreground">
@@ -359,6 +402,15 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
             ))}
           </div>
         )}
+        {showScrollToLatest ? (
+          <button
+            type="button"
+            className="sticky bottom-2 left-1/2 mt-3 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-[11px] text-muted-foreground shadow-sm hover:text-foreground"
+            onClick={() => scrollToLatest()}
+          >
+            Jump to latest
+          </button>
+        ) : null}
       </div>
       <footer className="shrink-0 border-t border-border/65 px-3 py-3">
         <div className="rounded-xl border border-border/85 bg-muted/15 p-2 shadow-sm focus-within:border-ring/70 focus-within:bg-muted/25">
@@ -387,7 +439,7 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
             onPaste={() => undefined}
           />
           <div className="flex items-center justify-between gap-2 px-1">
-            <span className="truncate text-[10px] text-muted-foreground/70">Enter to send · Shift+Enter for a new line</span>
+            <span className="truncate text-[10px] text-muted-foreground/70">Enter to send · Shift+Enter for a new line · Escape to cancel</span>
             <div className="flex items-center gap-1">
               {activeTurnId ? (
                 <button

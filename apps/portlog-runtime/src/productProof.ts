@@ -122,10 +122,14 @@ async function main(): Promise<void> {
     const recovered = await restartedClient.request<{
       sessionId: string;
       state: string;
+      events: Array<{ type: string; turnId?: string }>;
     }>("session.attach", {
       sessionId: session.sessionId,
     });
     assert(recovered.sessionId === session.sessionId, "session did not recover after runtime restart");
+    if (key) {
+      assert(recovered.events.some((event) => event.type === "user.message"), "transcript did not recover after runtime restart");
+    }
     const history = await restartedClient.request<{
       turns: Array<{ turnId: string; state: string }>;
     }>("session.history", { sessionId: session.sessionId });

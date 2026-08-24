@@ -288,6 +288,10 @@ export interface PortLogRuntimeEventBase {
 
 export type PortLogRuntimeEvent =
   | (PortLogRuntimeEventBase & {
+      readonly type: "user.message";
+      readonly text: string;
+    })
+  | (PortLogRuntimeEventBase & {
       readonly type: "assistant.delta";
       readonly delta: string;
     })

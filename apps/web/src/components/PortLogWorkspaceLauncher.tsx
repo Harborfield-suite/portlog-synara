@@ -14,6 +14,10 @@ import {
   type PortLogWorkspace,
   type PortLogWorkspaceSource,
 } from "../portlog/portlogWorkspaceSource";
+import {
+  usePortLogWorkspaceStore,
+  type PortLogWorkspaceRecord,
+} from "../portlog/portlogWorkspaceStore";
 import { CreateProjectDialog, type CreateProjectSubmitValue } from "./CreateProjectDialog";
 import { Button } from "./ui/button";
 import { CentralIcon } from "~/lib/central-icons";
@@ -60,6 +64,11 @@ export function PortLogWorkspaceLauncher(props: {
   const [droppedWorkspaceRoot, setDroppedWorkspaceRoot] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const recentProjects = useMemo(() => resolveRecentProjects(props.projects), [props.projects]);
+  const portLogWorkspacesById = usePortLogWorkspaceStore((state) => state.workspacesByProjectId);
+  const recentPortLogWorkspaces = useMemo(
+    () => Object.values(portLogWorkspacesById).sort((left, right) => left.name.localeCompare(right.name)),
+    [portLogWorkspacesById],
+  );
 
   const openPortLogWorkspace = async (
     root: string,
@@ -73,6 +82,14 @@ export function PortLogWorkspaceLauncher(props: {
     const workspace = options ? await source.open(root, options) : await source.open(root);
     await props.onOpenPortLogWorkspace(workspace, name);
     return true;
+  };
+
+  const openRecentPortLogWorkspace = async (workspace: PortLogWorkspaceRecord) => {
+    try {
+      await openPortLogWorkspace(workspace.root, workspace.name);
+    } catch (cause: unknown) {
+      setDropError(cause instanceof Error ? cause.message : "Could not open that workspace.");
+    }
   };
 
   const openRecentProject = async (project: Project) => {
@@ -172,26 +189,40 @@ export function PortLogWorkspaceLauncher(props: {
           </p>
 
           <div className="mt-10 flex flex-col gap-2" aria-label="Recent workspaces">
-            {recentProjects.length > 0 ? (
-              recentProjects.map((project, index) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  className={`flex items-center justify-between rounded-lg px-4 py-3 text-left transition-colors duration-200 ease-out hover:bg-secondary ${index === 0 ? "border border-border bg-secondary/45" : ""}`}
-                  onClick={() => void openRecentProject(project)}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-foreground">{project.name}</span>
-                    <span className="mt-1 block truncate text-xs text-muted-foreground">
-                      {projectMeta(project)}
-                    </span>
+            {recentPortLogWorkspaces.map((workspace) => (
+              <button
+                key={workspace.projectId}
+                type="button"
+                data-testid="portlog-recent-workspace"
+                className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors duration-200 ease-out hover:bg-primary/15"
+                onClick={() => void openRecentPortLogWorkspace(workspace)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-foreground">Continue {workspace.name}</span>
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">PortLog workspace · {workspace.root}</span>
+                </span>
+                <CentralIcon name="arrow-up-right" className="ml-4 size-4 shrink-0 opacity-60" aria-hidden="true" />
+              </button>
+            ))}
+            {recentProjects.map((project, index) => (
+              <button
+                key={project.id}
+                type="button"
+                className={`flex items-center justify-between rounded-lg px-4 py-3 text-left transition-colors duration-200 ease-out hover:bg-secondary ${index === 0 && recentPortLogWorkspaces.length === 0 ? "border border-border bg-secondary/45" : ""}`}
+                onClick={() => void openRecentProject(project)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-foreground">{project.name}</span>
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">
+                    {projectMeta(project)}
                   </span>
-                  <CentralIcon name="arrow-up-right" className="ml-4 size-4 shrink-0 opacity-60" aria-hidden="true" />
-                </button>
-              ))
-            ) : (
+                </span>
+                <CentralIcon name="arrow-up-right" className="ml-4 size-4 shrink-0 opacity-60" aria-hidden="true" />
+              </button>
+            ))}
+            {recentProjects.length === 0 && recentPortLogWorkspaces.length === 0 ? (
               <p className="py-3 text-sm text-muted-foreground">No plant workspaces yet.</p>
-            )}
+            ) : null}
           </div>
         </section>
 

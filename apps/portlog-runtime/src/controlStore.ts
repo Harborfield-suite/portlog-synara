@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import type {
   PortLogRuntimeClaimStatus,
+  PortLogRuntimeEvent,
   PortLogRuntimeEvidence,
   PortLogRuntimeEvidenceSupportStatus,
   PortLogRuntimeFinding,
@@ -71,6 +72,30 @@ export class ControlStore {
 
   close(): void {
     this.db.close();
+  }
+
+  saveEvent(event: PortLogRuntimeEvent): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO runtime_events(session_id, stream_id, cursor, event_json)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(event.sessionId, event.streamId, event.cursor, JSON.stringify(event));
+  }
+
+  listEvents(sessionId: string, limit: number): ReadonlyArray<PortLogRuntimeEvent> {
+    const rows = this.db
+      .prepare(
+        `SELECT event_json
+         FROM runtime_events
+         WHERE session_id = ?
+         ORDER BY event_id DESC
+         LIMIT ?`,
+      )
+      .all(sessionId, limit) as Array<Record<string, unknown>>;
+    return rows
+      .reverse()
+      .map((row) => JSON.parse(String(row.event_json)) as PortLogRuntimeEvent);
   }
 
   markInterrupted(): void {
@@ -420,6 +445,15 @@ export class ControlStore {
         evidence_ids_json TEXT NOT NULL,
         created_by_turn TEXT,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS runtime_events (
+        event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        cursor INTEGER NOT NULL,
+        event_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        UNIQUE (stream_id, cursor)
       );
       INSERT OR IGNORE INTO schema_migrations(version, applied_at)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));

@@ -4,6 +4,8 @@ import * as Path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { PortLogRuntimeEvent } from "@synara/contracts";
+
 import { ControlStore } from "./controlStore";
 
 const temporaryDirectories: string[] = [];
@@ -15,6 +17,26 @@ afterEach(() => {
 });
 
 describe("ControlStore evidence and findings", () => {
+  it("persists runtime transcript events across reopen", async () => {
+    const directory = FS.mkdtempSync(Path.join(OS.tmpdir(), "portlog-control-events-"));
+    temporaryDirectories.push(directory);
+    const first = await ControlStore.open(directory);
+    const event: PortLogRuntimeEvent = {
+      streamId: "stream-1",
+      cursor: 1,
+      sessionId: "session-1",
+      turnId: "turn-1",
+      type: "user.message",
+      text: "Inspect the fixture.",
+    };
+    first.saveEvent(event);
+    first.close();
+
+    const second = await ControlStore.open(directory);
+    expect(second.listEvents("session-1", 10)).toEqual([event]);
+    second.close();
+  });
+
   it("persists structured evidence and findings across reopen", async () => {
     const directory = FS.mkdtempSync(Path.join(OS.tmpdir(), "portlog-control-store-"));
     temporaryDirectories.push(directory);
