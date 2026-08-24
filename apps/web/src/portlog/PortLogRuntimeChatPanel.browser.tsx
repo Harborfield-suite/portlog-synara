@@ -165,6 +165,18 @@ describe("PortLogRuntimeChatPanel", () => {
     expect(getComputedStyle(wideRow!).maxWidth).toBe("none");
   });
 
+  it("fills a dynamically sized host sidebar", async () => {
+    await render(
+      <div style={{ width: "960px", height: "720px" }}>
+        <PortLogRuntimeChatPanel workspaceRoot="/tmp/project" onOpenEvidence={() => undefined} />
+      </div>,
+    );
+
+    const panel = page.getByTestId("portlog-runtime-chat");
+    await expect.element(panel).toBeVisible();
+    expect(panel.element().getBoundingClientRect().width).toBe(960);
+  });
+
   it("initially follows the tail of recovered history", async () => {
     const harness = createRuntimeClient(undefined, true);
     vi.stubGlobal("desktopBridge", {
