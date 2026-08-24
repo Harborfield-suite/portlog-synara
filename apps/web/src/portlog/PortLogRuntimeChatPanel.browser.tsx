@@ -4,6 +4,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
+import type { PortLogRuntimeEvent } from "@synara/contracts";
 import type { PortLogRuntimeClient } from "./portlogRuntimeClient";
 import { PortLogRuntimeChatPanel } from "./PortLogRuntimeChatPanel";
 
@@ -17,11 +18,44 @@ const runtimeEvent = {
   text: "Inspect the fixture.",
 } as const;
 
-function createRuntimeClient(activeTurnId?: string): {
+function createRuntimeClient(activeTurnId?: string, history = false): {
   client: PortLogRuntimeClient;
   cancelTurn: ReturnType<typeof vi.fn>;
+  emit: (event: PortLogRuntimeEvent) => void;
 } {
   const cancelTurn = vi.fn(async () => ({ accepted: true as const }));
+  const listeners = new Set<(event: PortLogRuntimeEvent) => void>();
+  const historyEvents: PortLogRuntimeEvent[] = history
+    ? Array.from({ length: 80 }, (_, index) => {
+        const turnId = `turn-${index + 1}`;
+        const cursor = index * 3 + 1;
+        return [
+          {
+            ...runtimeEvent,
+            cursor,
+            turnId,
+            text: `Question ${index + 1}`,
+          },
+          {
+            ...runtimeEvent,
+            cursor: cursor + 1,
+            turnId,
+            type: "assistant.delta" as const,
+            delta: `${`Response ${index + 1} `.repeat(18)}end`,
+            createdAt: "2026-01-01T00:00:01.000Z",
+          },
+          {
+            ...runtimeEvent,
+            cursor: cursor + 2,
+            turnId,
+            type: "turn.completed" as const,
+            state: "completed" as const,
+            createdAt: "2026-01-01T00:00:02.000Z",
+          },
+        ];
+      }).flat()
+    : [];
+  const events = historyEvents.length > 0 ? historyEvents : undefined;
   return {
     client: {
     getStatus: async () => ({ status: "ready", ready: null, error: null }),
@@ -64,7 +98,7 @@ function createRuntimeClient(activeTurnId?: string): {
       cursor: activeTurnId ? 2 : 1,
       state: activeTurnId ? "active" : "idle",
       ...(activeTurnId ? { activeTurnId } : {}),
-      events: activeTurnId
+      events: events ?? (activeTurnId
         ? [
             runtimeEvent,
             {
@@ -75,12 +109,18 @@ function createRuntimeClient(activeTurnId?: string): {
               createdAt: "2026-01-01T00:00:01.000Z",
             },
           ]
-        : [runtimeEvent],
+        : [runtimeEvent]),
     }),
     sessionHistory: async () => ({ sessionId: "session-1", offset: 0, limit: 20, hasMore: false, turns: [] }),
-    onEvent: () => () => undefined,
+    onEvent: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     } as unknown as PortLogRuntimeClient,
     cancelTurn,
+    emit: (event) => {
+      for (const listener of listeners) listener(event);
+    },
   };
 }
 
@@ -119,6 +159,60 @@ describe("PortLogRuntimeChatPanel", () => {
     const chat = page.getByTestId("portlog-runtime-chat").element();
     expect(chat.querySelector('[data-chat-scroll-container="true"]')).not.toBeNull();
     expect(chat.querySelectorAll('[class*="max-w-none"]').length).toBeGreaterThan(0);
+  });
+
+  it("initially follows the tail of recovered history", async () => {
+    const harness = createRuntimeClient(undefined, true);
+    vi.stubGlobal("desktopBridge", {
+      setTheme: async () => undefined,
+      portlogRuntime: harness.client,
+    });
+
+    await render(
+      <PortLogRuntimeChatPanel workspaceRoot="/tmp/project" onOpenEvidence={() => undefined} />,
+    );
+
+    await expect.element(page.getByText("Question 80")).toBeVisible();
+    const scrollContainer = page
+      .getByTestId("portlog-runtime-chat")
+      .element()
+      .querySelector<HTMLElement>('[data-chat-scroll-container="true"]');
+    expect(scrollContainer).not.toBeNull();
+    expect(scrollContainer!.scrollTop + scrollContainer!.clientHeight).toBeGreaterThanOrEqual(
+      scrollContainer!.scrollHeight - 2,
+    );
+  });
+
+  it("keeps following live assistant output while at the tail", async () => {
+    const harness = createRuntimeClient(undefined, true);
+    vi.stubGlobal("desktopBridge", {
+      setTheme: async () => undefined,
+      portlogRuntime: harness.client,
+    });
+
+    await render(
+      <PortLogRuntimeChatPanel workspaceRoot="/tmp/project" onOpenEvidence={() => undefined} />,
+    );
+    await expect.element(page.getByText("Question 80")).toBeVisible();
+
+    harness.emit({
+      ...runtimeEvent,
+      cursor: 241,
+      turnId: "turn-80",
+      type: "assistant.delta",
+      delta: " More streamed output.",
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+    await expect.element(page.getByText(/More streamed output/)).toBeVisible();
+
+    const scrollContainer = page
+      .getByTestId("portlog-runtime-chat")
+      .element()
+      .querySelector<HTMLElement>('[data-chat-scroll-container="true"]');
+    expect(scrollContainer).not.toBeNull();
+    expect(scrollContainer!.scrollTop + scrollContainer!.clientHeight).toBeGreaterThanOrEqual(
+      scrollContainer!.scrollHeight - 2,
+    );
   });
 
   it("keeps the Synara composer disabled and exposes runtime cancellation during an active turn", async () => {
