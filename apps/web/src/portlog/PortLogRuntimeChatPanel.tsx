@@ -1,21 +1,23 @@
 import {
+  MessageId,
   MODEL_OPTIONS_BY_PROVIDER,
+  TurnId,
   type ModelSlug,
   type ProviderKind,
   type PortLogRuntimeEvent,
   type PortLogRuntimeEvidence,
   type PortLogRuntimeModel,
 } from "@synara/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import ChatMarkdown from "../components/ChatMarkdown";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "../components/ComposerPromptEditor";
 import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
 import type { ProviderModelOption } from "../providerModelOptions";
-import { isScrollContainerNearBottom } from "../chat-scroll";
 import { ArrowUpIcon, StopIcon } from "../lib/icons";
 import { getPortLogRuntimeClient, type PortLogRuntimeClient } from "./portlogRuntimeClient";
 import { PortLogEvidenceInspector } from "./PortLogEvidenceInspector";
+import { MessagesTimeline } from "../components/chat/MessagesTimeline";
+import type { TimelineEntry } from "../workLog";
 
 interface PortLogRuntimeChatPanelProps {
   readonly workspaceRoot: string | null;
@@ -26,6 +28,7 @@ type TranscriptRow = {
   readonly id: string;
   readonly role: "user" | "assistant" | "tool" | "error";
   readonly text: string;
+  readonly createdAt?: string;
 };
 
 const DEFAULT_MODEL: ModelSlug = "openrouter/deepseek/deepseek-v4-flash";
@@ -99,9 +102,8 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const [status, setStatus] = useState("Starting runtime…");
   const [error, setError] = useState<string | null>(null);
-  const transcriptRef = useRef<HTMLDivElement>(null);
   const [followTranscript, setFollowTranscript] = useState(true);
-  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
   const recoveryRef = useRef<{
     readonly sessionId: string;
     readonly pending: PortLogRuntimeEvent[];
@@ -110,13 +112,42 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
 
   const options = useMemo(() => modelOptions(models), [models]);
   const selectedRuntimeModel = models.find((model) => model.ref === selectedModel) ?? null;
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const node = transcriptRef.current;
-    if (!node) return;
-    node.scrollTo({ top: node.scrollHeight, behavior });
-    setFollowTranscript(true);
-    setShowScrollToLatest(false);
-  }, []);
+  const timelineEntries = useMemo<ReadonlyArray<TimelineEntry>>(
+    () =>
+      rows.map((row) => {
+        const createdAt = row.createdAt ?? "1970-01-01T00:00:00.000Z";
+        if (row.role === "tool") {
+          return {
+            id: row.id,
+            kind: "work",
+            createdAt,
+            entry: {
+              id: row.id,
+              createdAt,
+              label: row.text,
+              tone: "tool",
+              toolName: row.text.replace(/^(Running|Completed|Failed) /u, "").replace(/…$/u, ""),
+              toolCallId: row.id,
+              turnId: activeTurnId ? TurnId.makeUnsafe(activeTurnId) : null,
+            },
+          };
+        }
+        return {
+          id: row.id,
+          kind: "message",
+          createdAt,
+          message: {
+            id: MessageId.makeUnsafe(row.id),
+            role: row.role === "error" ? "system" : row.role,
+            text: row.text,
+            createdAt,
+            streaming: row.role === "assistant" && Boolean(activeTurnId),
+            turnId: activeTurnId ? TurnId.makeUnsafe(activeTurnId) : null,
+          },
+        };
+      }),
+    [activeTurnId, rows],
+  );
   const canSend = Boolean(
     client &&
       props.workspaceRoot &&
@@ -125,13 +156,6 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
       selectedRuntimeModel?.status === "ready",
   );
   const modelNeedsAuth = selectedRuntimeModel?.status === "needs_auth";
-
-  useEffect(() => {
-    const node = transcriptRef.current;
-    if (!node || (!followTranscript && !activeTurnId)) return;
-    node.scrollTop = node.scrollHeight;
-    setShowScrollToLatest(false);
-  }, [activeTurnId, followTranscript, rows]);
 
   useEffect(() => {
     if (!client || !props.workspaceRoot) return;
@@ -225,7 +249,10 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         return;
       }
       setRows((previous) => applyEvent(previous, event));
-      if (event.type === "turn.completed") setActiveTurnId(null);
+      if (event.type === "turn.completed") {
+        setActiveTurnId(null);
+        setActiveTurnStartedAt(null);
+      }
     });
   }, [client, sessionId]);
 
@@ -246,6 +273,7 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
     setRows((previous) => [...previous, { id: turnId, role: "user", text }]);
     setError(null);
     setActiveTurnId(turnId);
+    setActiveTurnStartedAt(new Date().toISOString());
 
     try {
       let nextProjectId = projectId;
@@ -343,18 +371,25 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         projectId={projectId}
         onOpenEvidence={(evidence) => void openEvidence(evidence)}
       />
-      <div
-        ref={transcriptRef}
-        data-chat-scroll-container="true"
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-5 text-sm"
-        onScroll={(event) => {
-          const node = event.currentTarget;
-          const nearBottom = isScrollContainerNearBottom(node);
-          setFollowTranscript(nearBottom);
-          setShowScrollToLatest(!nearBottom);
-        }}
-      >
-        {rows.length === 0 ? (
+      <MessagesTimeline
+        hasMessages={timelineEntries.length > 0}
+        isWorking={Boolean(activeTurnId)}
+        activeTurnInProgress={Boolean(activeTurnId)}
+        activeTurnStartedAt={activeTurnStartedAt}
+        followLiveOutput={followTranscript}
+        timelineEntries={timelineEntries}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => undefined}
+        isRevertingCheckpoint={false}
+        onOpenTurnDiff={() => undefined}
+        onImageExpand={() => undefined}
+        markdownCwd={props.workspaceRoot ?? undefined}
+        resolvedTheme="dark"
+        timestampFormat="locale"
+        workspaceRoot={props.workspaceRoot ?? undefined}
+        onIsAtEndChange={setFollowTranscript}
+        emptyStateContent={
           <div className="mx-auto flex h-full max-w-sm flex-col justify-center text-center">
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-muted/30 text-xs font-semibold text-muted-foreground">
               PL
@@ -369,49 +404,8 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
               </p>
             ) : null}
           </div>
-        ) : (
-          <div className="mx-auto flex max-w-2xl flex-col gap-5">
-            {rows.map((row) => (
-              <article key={row.id} className={row.role === "user" ? "self-end max-w-[88%]" : "max-w-[94%]"}>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
-                  {row.role === "user" ? "You" : row.role === "tool" ? "Workspace" : row.role === "error" ? "Runtime" : "PortLog"}
-                </div>
-                <div
-                  className={
-                    row.role === "user"
-                      ? "rounded-xl rounded-br-sm bg-muted/60 px-3 py-2 text-foreground"
-                      : row.role === "error"
-                        ? "rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive"
-                        : row.role === "tool"
-                          ? "rounded-lg border border-border/70 bg-muted/20 px-3 py-2 font-mono text-xs text-muted-foreground"
-                          : "px-0.5 py-1 leading-6 text-foreground"
-                  }
-                >
-                  {row.role === "assistant" || row.role === "user" ? (
-                    <ChatMarkdown
-                      text={row.text}
-                      cwd={props.workspaceRoot ?? undefined}
-                      isStreaming={row.role === "assistant" && Boolean(activeTurnId)}
-                      variant={row.role === "user" ? "user" : "assistant"}
-                    />
-                  ) : (
-                    <span className="whitespace-pre-wrap">{row.text}</span>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-        {showScrollToLatest ? (
-          <button
-            type="button"
-            className="sticky bottom-2 left-1/2 mt-3 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-[11px] text-muted-foreground shadow-sm hover:text-foreground"
-            onClick={() => scrollToLatest()}
-          >
-            Jump to latest
-          </button>
-        ) : null}
-      </div>
+        }
+      />
       <footer className="shrink-0 border-t border-border/65 px-3 py-3">
         <div className="rounded-xl border border-border/85 bg-muted/15 p-2 shadow-sm focus-within:border-ring/70 focus-within:bg-muted/25">
           <ComposerPromptEditor
