@@ -234,6 +234,7 @@ export class PiDriver {
     };
     record.unsubscribe = session.subscribe((event) => {
       const turnId = record.activeTurnId;
+      const createdAt = new Date().toISOString();
       const stats = event.type === "agent_end" ? record.session.getSessionStats() : undefined;
       const translated = translatePiEvent(
         event,
@@ -243,11 +244,13 @@ export class PiDriver {
               cursor: 0,
               sessionId: record.sessionId,
               turnId,
+              createdAt,
             }
           : {
               streamId: record.streamId,
               cursor: 0,
               sessionId: record.sessionId,
+              createdAt,
             },
         event.type === "agent_end" ? record.session.agent.state.errorMessage : undefined,
         record.cancelled,
@@ -328,6 +331,7 @@ export class PiDriver {
         cursor: 0,
         sessionId: record.sessionId,
         turnId,
+        createdAt: new Date().toISOString(),
         type: "turn.completed",
         state: "cancelled",
       });
@@ -377,6 +381,7 @@ export class PiDriver {
       cursor: 0,
       sessionId: record.sessionId,
       turnId,
+      createdAt: new Date().toISOString(),
       type: "runtime.error",
       code: "PI_RUNTIME_ERROR",
       message,
@@ -386,6 +391,7 @@ export class PiDriver {
       cursor: 0,
       sessionId: record.sessionId,
       turnId,
+      createdAt: new Date().toISOString(),
       type: "turn.completed",
       state: "failed",
       errorMessage: message,

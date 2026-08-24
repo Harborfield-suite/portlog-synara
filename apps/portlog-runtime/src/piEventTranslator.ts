@@ -5,6 +5,7 @@ export interface PiEventContext {
   readonly cursor: number;
   readonly sessionId: string;
   readonly turnId?: string;
+  readonly createdAt: string;
 }
 
 function eventBase(context: PiEventContext): PiEventContext {

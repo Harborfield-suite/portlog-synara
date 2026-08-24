@@ -1,17 +1,20 @@
 import {
-  MessageId,
   MODEL_OPTIONS_BY_PROVIDER,
   TurnId,
+  type MessageId,
   type ModelSlug,
   type ProviderKind,
   type PortLogRuntimeEvent,
   type PortLogRuntimeEvidence,
   type PortLogRuntimeModel,
 } from "@synara/contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { LegendListRef } from "@legendapp/list/react";
 
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "../components/ComposerPromptEditor";
+import type { TurnDiffSummary } from "../types";
 import { ComposerColumnFrame } from "../components/chat/ComposerColumnFrame";
+import { ChatTranscriptPane } from "../components/chat/ChatTranscriptPane";
 import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
 import {
   COMPOSER_EDITOR_PADDING_CLASS_NAME,
@@ -19,27 +22,27 @@ import {
   COMPOSER_INPUT_SHELL_CLASS_NAME,
   COMPOSER_INPUT_SURFACE_CLASS_NAME,
 } from "../components/chat/composerPickerStyles";
+import { DEFAULT_CHAT_FONT_SIZE_PX } from "../appSettings";
 import type { ProviderModelOption } from "../providerModelOptions";
-import { ArrowUpIcon, StopIcon } from "../lib/icons";
-import { cn } from "../lib/utils";
+import { ComposerSendArrowIcon } from "../lib/icons";
+import { Button } from "../components/ui/button";
 import { getPortLogRuntimeClient, type PortLogRuntimeClient } from "./portlogRuntimeClient";
 import { PortLogEvidenceInspector } from "./PortLogEvidenceInspector";
-import { MessagesTimeline } from "../components/chat/MessagesTimeline";
-import type { TimelineEntry } from "../workLog";
+import {
+  applyPortLogEvent,
+  createPortLogChatState,
+  portLogTimelineEntries,
+} from "./portlogChatAdapter";
 
 interface PortLogRuntimeChatPanelProps {
   readonly workspaceRoot: string | null;
   readonly onOpenEvidence: (evidenceId: string, sourcePath: string | null) => void;
 }
 
-type TranscriptRow = {
-  readonly id: string;
-  readonly role: "user" | "assistant" | "tool" | "error";
-  readonly text: string;
-  readonly createdAt?: string;
-};
-
 const DEFAULT_MODEL: ModelSlug = "openrouter/deepseek/deepseek-v4-flash";
+const EMPTY_REVERT_TURN_COUNTS: Map<MessageId, number> = new Map();
+const EMPTY_TURN_DIFF_SUMMARIES: Map<MessageId, TurnDiffSummary> = new Map();
+const NOOP = () => undefined;
 
 function runtimeSessionStorageKey(workspaceRoot: string): string {
   return `portlog-runtime-session:${workspaceRoot}`;
@@ -49,7 +52,9 @@ function newId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`;
 }
 
-function modelOptions(models: ReadonlyArray<PortLogRuntimeModel>): Record<ProviderKind, ReadonlyArray<ProviderModelOption>> {
+function modelOptions(
+  models: ReadonlyArray<PortLogRuntimeModel>,
+): Record<ProviderKind, ReadonlyArray<ProviderModelOption>> {
   return {
     ...MODEL_OPTIONS_BY_PROVIDER,
     pi: models.map((model) => ({
@@ -61,42 +66,6 @@ function modelOptions(models: ReadonlyArray<PortLogRuntimeModel>): Record<Provid
   };
 }
 
-function applyEvent(rows: ReadonlyArray<TranscriptRow>, event: PortLogRuntimeEvent): TranscriptRow[] {
-  switch (event.type) {
-    case "user.message":
-      return rows.some((row) => row.id === event.turnId)
-        ? [...rows]
-        : [...rows, { id: event.turnId ?? newId("user"), role: "user", text: event.text }];
-    case "assistant.delta": {
-      const last = rows.at(-1);
-      if (last?.role === "assistant") {
-        return [...rows.slice(0, -1), { ...last, text: `${last.text}${event.delta}` }];
-      }
-      return [...rows, { id: newId("assistant"), role: "assistant", text: event.delta }];
-    }
-    case "tool.started":
-      return [
-        ...rows,
-        { id: event.toolCallId, role: "tool", text: `Running ${event.toolName}…` },
-      ];
-    case "tool.completed":
-      return rows.map((row) =>
-        row.id === event.toolCallId
-          ? {
-              ...row,
-              text: `${event.status === "completed" ? "Completed" : "Failed"} ${event.toolName}${event.preview ? `\n${event.preview}` : ""}`,
-            }
-          : row,
-      );
-    case "runtime.error":
-      return [...rows, { id: newId("error"), role: "error", text: event.message }];
-    case "turn.completed":
-      return event.errorMessage
-        ? [...rows, { id: newId("error"), role: "error", text: event.errorMessage }]
-        : [...rows];
-  }
-}
-
 export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
   const client = useMemo<PortLogRuntimeClient | null>(() => getPortLogRuntimeClient(), []);
   const [models, setModels] = useState<ReadonlyArray<PortLogRuntimeModel>>([]);
@@ -104,7 +73,7 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
-  const [rows, setRows] = useState<ReadonlyArray<TranscriptRow>>([]);
+  const [chatState, setChatState] = useState(createPortLogChatState);
   const [draft, setDraft] = useState("");
   const [composerCursor, setComposerCursor] = useState(0);
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
@@ -120,42 +89,11 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
 
   const options = useMemo(() => modelOptions(models), [models]);
   const selectedRuntimeModel = models.find((model) => model.ref === selectedModel) ?? null;
-  const timelineEntries = useMemo<ReadonlyArray<TimelineEntry>>(
-    () =>
-      rows.map((row) => {
-        const createdAt = row.createdAt ?? "1970-01-01T00:00:00.000Z";
-        if (row.role === "tool") {
-          return {
-            id: row.id,
-            kind: "work",
-            createdAt,
-            entry: {
-              id: row.id,
-              createdAt,
-              label: row.text,
-              tone: "tool",
-              toolName: row.text.replace(/^(Running|Completed|Failed) /u, "").replace(/…$/u, ""),
-              toolCallId: row.id,
-              turnId: activeTurnId ? TurnId.makeUnsafe(activeTurnId) : null,
-            },
-          };
-        }
-        return {
-          id: row.id,
-          kind: "message",
-          createdAt,
-          message: {
-            id: MessageId.makeUnsafe(row.id),
-            role: row.role === "error" ? "system" : row.role,
-            text: row.text,
-            createdAt,
-            streaming: row.role === "assistant" && Boolean(activeTurnId),
-            turnId: activeTurnId ? TurnId.makeUnsafe(activeTurnId) : null,
-          },
-        };
-      }),
-    [activeTurnId, rows],
+  const timelineEntries = useMemo(
+    () => portLogTimelineEntries(chatState),
+    [chatState],
   );
+  const listRef = useRef<LegendListRef | null>(null);
   const canSend = Boolean(
     client &&
       props.workspaceRoot &&
@@ -167,6 +105,10 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
 
   useEffect(() => {
     if (!client || !props.workspaceRoot) return;
+    setChatState(createPortLogChatState());
+    setFollowTranscript(true);
+    setActiveTurnId(null);
+    setActiveTurnStartedAt(null);
     const saved = localStorage.getItem(runtimeSessionStorageKey(props.workspaceRoot));
     if (!saved) return;
     try {
@@ -174,7 +116,11 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
       if (typeof parsed.projectId !== "string" || typeof parsed.sessionId !== "string") return;
       setProjectId(parsed.projectId);
       setSessionId(parsed.sessionId);
-      const recovery = {
+      const recovery: {
+        readonly sessionId: string;
+        readonly pending: PortLogRuntimeEvent[];
+        snapshotPending: boolean;
+      } = {
         sessionId: parsed.sessionId,
         pending: [],
         snapshotPending: true,
@@ -183,25 +129,37 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
       void client.attachSession({ sessionId: parsed.sessionId }).then(
         (snapshot) => {
           if (recoveryRef.current !== recovery) return;
-          const installed = snapshot.events.reduce(applyEvent, [] as ReadonlyArray<TranscriptRow>);
+          const installed = snapshot.events.reduce(
+            applyPortLogEvent,
+            createPortLogChatState(),
+          );
           const pending = recovery.pending.filter(
             (event) => event.streamId === snapshot.streamId && event.cursor > snapshot.cursor,
           );
-          setRows(pending.reduce(applyEvent, installed));
+          const recovered = pending.reduce(applyPortLogEvent, installed);
+          setChatState(recovered);
           setActiveTurnId(snapshot.activeTurnId ?? null);
+          setActiveTurnStartedAt(
+            snapshot.activeTurnId
+              ? recovered.messages.find(
+                  (message) =>
+                    message.role === "user" && message.turnId === TurnId.makeUnsafe(snapshot.activeTurnId!),
+                )?.createdAt ?? null
+              : null,
+          );
           if (snapshot.state === "interrupted") setStatus("Previous turn interrupted; review before continuing");
           recovery.snapshotPending = false;
           recoveryRef.current = null;
         },
         () => {
           if (recoveryRef.current === recovery) recoveryRef.current = null;
-          localStorage.removeItem(runtimeSessionStorageKey(props.workspaceRoot));
+          localStorage.removeItem(runtimeSessionStorageKey(props.workspaceRoot!));
           setProjectId(null);
           setSessionId(null);
         },
       );
     } catch {
-      localStorage.removeItem(runtimeSessionStorageKey(props.workspaceRoot));
+      localStorage.removeItem(runtimeSessionStorageKey(props.workspaceRoot!));
     }
   }, [client, props.workspaceRoot]);
 
@@ -256,7 +214,10 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         recovery.pending.push(event);
         return;
       }
-      setRows((previous) => applyEvent(previous, event));
+      setChatState((previous) => applyPortLogEvent(previous, event));
+      if (event.type === "user.message" && event.turnId === activeTurnId) {
+        setActiveTurnStartedAt(event.createdAt);
+      }
       if (event.type === "turn.completed") {
         setActiveTurnId(null);
         setActiveTurnStartedAt(null);
@@ -278,7 +239,17 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
     const turnId = newId("turn");
     setDraft("");
     setComposerCursor(0);
-    setRows((previous) => [...previous, { id: turnId, role: "user", text }]);
+    setChatState((previous) =>
+      applyPortLogEvent(previous, {
+        streamId: `local:${turnId}`,
+        cursor: 0,
+        sessionId: sessionId ?? "pending",
+        turnId,
+        createdAt: new Date().toISOString(),
+        type: "user.message",
+        text,
+      }),
+    );
     setError(null);
     setActiveTurnId(turnId);
     setActiveTurnStartedAt(new Date().toISOString());
@@ -343,12 +314,20 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
     props.onOpenEvidence(evidence.evidenceId, artifact?.relativePath ?? null);
   };
 
+  const scrollToBottom = useCallback(() => {
+    void listRef.current?.scrollToEnd?.({ animated: true });
+  }, []);
+
   if (!client) {
     return <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">PortLog runtime is available in the desktop app.</div>;
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background" aria-label="PortLog runtime chat">
+    <section
+      className="flex h-full min-h-0 flex-col bg-background"
+      aria-label="PortLog runtime chat"
+      data-testid="portlog-runtime-chat"
+    >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/65 px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -379,24 +358,44 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
         projectId={projectId}
         onOpenEvidence={(evidence) => void openEvidence(evidence)}
       />
-      <MessagesTimeline
-        hasMessages={timelineEntries.length > 0}
-        isWorking={Boolean(activeTurnId)}
+      <ChatTranscriptPane
+        activeThreadId={sessionId ?? "portlog-runtime-empty"}
+        activeTurnId={activeTurnId ? TurnId.makeUnsafe(activeTurnId) : null}
         activeTurnInProgress={Boolean(activeTurnId)}
         activeTurnStartedAt={activeTurnStartedAt}
-        followLiveOutput={followTranscript}
-        timelineEntries={timelineEntries}
-        turnDiffSummaryByAssistantMessageId={new Map()}
-        revertTurnCountByUserMessageId={new Map()}
-        onRevertUserMessage={() => undefined}
+        chatFontSizePx={DEFAULT_CHAT_FONT_SIZE_PX}
+        emptyStateProjectName={undefined}
+        hasMessages={timelineEntries.length > 0}
         isRevertingCheckpoint={false}
-        onOpenTurnDiff={() => undefined}
-        onImageExpand={() => undefined}
+        isWorking={Boolean(activeTurnId)}
+        followLiveOutput={Boolean(activeTurnId) && followTranscript}
+        listRef={listRef}
         markdownCwd={props.workspaceRoot ?? undefined}
-        resolvedTheme="dark"
-        timestampFormat="locale"
-        workspaceRoot={props.workspaceRoot ?? undefined}
+        onExpandTimelineImage={NOOP}
+        onMessagesClickCapture={NOOP}
+        onMessagesMouseUp={NOOP}
+        onMessagesPointerCancel={NOOP}
+        onMessagesPointerDown={NOOP}
+        onMessagesPointerUp={NOOP}
+        onMessagesScroll={NOOP}
+        onMessagesTouchEnd={NOOP}
+        onMessagesTouchMove={NOOP}
+        onMessagesTouchStart={NOOP}
+        onMessagesWheel={NOOP}
         onIsAtEndChange={setFollowTranscript}
+        onOpenTurnDiff={NOOP}
+        onOpenThread={NOOP}
+        onRevertUserMessage={NOOP}
+        onScrollToBottom={scrollToBottom}
+        resolvedTheme="dark"
+        revertTurnCountByUserMessageId={EMPTY_REVERT_TURN_COUNTS}
+        scrollButtonVisible={!followTranscript && timelineEntries.length > 0}
+        terminalWorkspaceTerminalTabActive={false}
+        timelineEntries={timelineEntries}
+        timestampFormat="locale"
+        turnDiffSummaryByAssistantMessageId={EMPTY_TURN_DIFF_SUMMARIES}
+        workspaceRoot={props.workspaceRoot ?? undefined}
+        worktreeSetup={null}
         emptyStateContent={
           <div className="mx-auto flex h-full max-w-sm flex-col justify-center text-center">
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-muted/30 text-xs font-semibold text-muted-foreground">
@@ -414,10 +413,18 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
           </div>
         }
       />
-      <footer className="shrink-0 px-3 pb-3 pt-0">
+      <form
+        className="relative z-10 w-full shrink-0 overflow-visible px-3 pb-3 pt-0"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void send();
+        }}
+        data-chat-composer-form="true"
+        data-testid="portlog-composer-form"
+      >
         <ComposerColumnFrame>
           <div className={COMPOSER_INPUT_SHELL_CLASS_NAME}>
-            <div className={cn(COMPOSER_INPUT_SURFACE_CLASS_NAME, "overflow-hidden") }>
+            <div className={COMPOSER_INPUT_SURFACE_CLASS_NAME}>
               <div className={COMPOSER_EDITOR_PADDING_CLASS_NAME}>
                 <ComposerPromptEditor
                   ref={composerEditorRef}
@@ -444,36 +451,40 @@ export function PortLogRuntimeChatPanel(props: PortLogRuntimeChatPanelProps) {
                   onPaste={() => undefined}
                 />
               </div>
-              <div className={cn(COMPOSER_FOOTER_ROW_CLASS_NAME, "gap-2") }>
-                <span className="truncate text-[10px] text-muted-foreground/70">Enter to send · Shift+Enter for a new line · Escape to cancel</span>
+              <div className={COMPOSER_FOOTER_ROW_CLASS_NAME}>
+                <div className="min-w-0 flex-1" />
                 <div className="flex shrink-0 items-center gap-1">
                   {activeTurnId ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="prominent"
+                      size="icon-xs"
+                      className="size-7 rounded-full sm:size-7"
                       aria-label="Cancel turn"
                       title="Cancel turn"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => void cancel()}
                     >
-                      <StopIcon className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    aria-label="Send prompt"
-                    title="Send prompt"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    disabled={!canSend}
-                    onClick={() => void send()}
-                  >
-                    <ArrowUpIcon className="h-4 w-4" />
-                  </button>
+                      <span aria-hidden="true" className="block size-2 rounded-[1px] bg-current" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      variant="prominent"
+                      size="icon-xs"
+                      className="size-7 rounded-full sm:size-7"
+                      aria-label="Send prompt"
+                      title="Send prompt"
+                      disabled={!canSend}
+                    >
+                      <ComposerSendArrowIcon aria-hidden="true" className="size-5 shrink-0 translate-y-px" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </ComposerColumnFrame>
-      </footer>
+      </form>
     </section>
   );
 }

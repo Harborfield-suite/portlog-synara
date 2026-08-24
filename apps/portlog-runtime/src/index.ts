@@ -262,10 +262,20 @@ function parseModelRef(modelRef: string): { providerId: string; modelId: string 
   return { providerId: modelRef.slice(0, separator), modelId: modelRef.slice(separator + 1) };
 }
 
-function emitRuntimeEvent(event: PortLogRuntimeEvent): void {
+type RuntimeEventInput = PortLogRuntimeEvent extends infer Event
+  ? Event extends PortLogRuntimeEvent
+    ? Omit<Event, "createdAt" | "cursor"> & Partial<Pick<Event, "createdAt" | "cursor">>
+    : never
+  : never;
+
+function emitRuntimeEvent(event: RuntimeEventInput): void {
   const cursor = (streamCursors.get(event.streamId) ?? 0) + 1;
   streamCursors.set(event.streamId, cursor);
-  const normalized = { ...event, cursor };
+  const normalized: PortLogRuntimeEvent = {
+    ...event,
+    createdAt: event.createdAt ?? new Date().toISOString(),
+    cursor,
+  } as PortLogRuntimeEvent;
   const buffer = sessionEventBuffers.get(event.sessionId) ?? [];
   buffer.push(normalized);
   if (buffer.length > MAX_SESSION_EVENTS) buffer.splice(0, buffer.length - MAX_SESSION_EVENTS);
@@ -311,7 +321,7 @@ async function openProject(params: unknown): Promise<PortLogRuntimeProject> {
   const values = paramsObject(params);
   const root = requiredString(values, "root");
   if (!root) throw new Error("project.open requires a workspace root.");
-  const canonicalRoot = await ensureProjectRoot(root, values.createIfMissing === true);
+  const canonicalRoot = await ensureProjectRoot(root, values?.createIfMissing === true);
   const existing =
     [...projects.values()].find((project) => project.root === canonicalRoot) ??
     controlStore?.findProjectByRoot(canonicalRoot);

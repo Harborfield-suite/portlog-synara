@@ -26,6 +26,7 @@ describe("ControlStore evidence and findings", () => {
       cursor: 1,
       sessionId: "session-1",
       turnId: "turn-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
       type: "user.message",
       text: "Inspect the fixture.",
     };
